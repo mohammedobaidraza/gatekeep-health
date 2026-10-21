@@ -14,27 +14,31 @@ import { EmployeeSummary, getEmployees } from "@/lib/api";
 
 type TabKey = "active" | "past";
 
+function credentialStatus(expiry: string | null): string {
+  if (!expiry) return "";
+  const days = Math.ceil(
+    (new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+  if (days < 0) return "expired";
+  if (days <= 90) return "expiring";
+  return "";
+}
+
 export default function DashboardPage() {
-  const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
+  const [staff, setStaff] = useState<EmployeeSummary[]>([]);
   const [tab, setTab] = useState<TabKey>("active");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("gatekeep_token");
-
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
+    if (!token) { window.location.href = "/login"; return; }
 
     getEmployees(token)
-      .then(setEmployees)
+      .then(setStaff)
       .catch((error) => {
         setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load employees"
+          error instanceof Error ? error.message : "Failed to load clinical staff"
         );
       })
       .finally(() => setLoading(false));
@@ -46,24 +50,12 @@ export default function DashboardPage() {
     window.location.href = "/login";
   }
 
-  const active = employees.filter(
-    (employee) => employee.employment_status !== "terminated"
-  );
-
-  const past = employees.filter(
-    (employee) => employee.employment_status === "terminated"
-  );
-
+  const active = staff.filter((s) => s.employment_status !== "terminated");
+  const past = staff.filter((s) => s.employment_status === "terminated");
   const visible = tab === "active" ? active : past;
 
-  const activeAccounts = active.reduce(
-    (total, employee) => total + employee.active_accounts,
-    0
-  );
-
-  const highRisk = active.filter(
-    (employee) => employee.risk_level === "High"
-  ).length;
+  const activeAccounts = active.reduce((t, s) => t + s.active_accounts, 0);
+  const highRisk = active.filter((s) => s.risk_level === "High").length;
 
   return (
     <Shell
@@ -74,22 +66,22 @@ export default function DashboardPage() {
       }
     >
       <PageHeader
-        title="Company Directory"
-        subtitle="Manage identities, connected accounts, and secure offboarding."
+        title="Clinical Staff Directory"
+        subtitle="Manage clinician identities, system access, and secure offboarding."
         actions={
           <>
             <Link
               href="/employees/new"
               className="flex h-control items-center gap-2 border border-hairline px-inset font-ui text-ui text-ink transition-colors hover:border-hairline-strong"
             >
-              Add employee
+              Add clinician
             </Link>
 
             <Link
               href="/gary"
               className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
             >
-              Ask Gary
+              Ask Grace
               <ArrowRight size={12} strokeWidth={2} />
             </Link>
           </>
@@ -97,11 +89,11 @@ export default function DashboardPage() {
       />
 
       <div className="mt-8 grid gap-px bg-hairline sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Active employees" value={active.length} />
-        <Stat label="Past employees" value={past.length} />
-        <Stat label="Active accounts" value={activeAccounts} />
+        <Stat label="Active clinicians" value={active.length} />
+        <Stat label="Offboarded" value={past.length} />
+        <Stat label="Active system access" value={activeAccounts} />
         <Stat
-          label="High-risk employees"
+          label="HIPAA high-risk"
           value={highRisk}
           emphasis={highRisk > 0}
         />
@@ -111,7 +103,7 @@ export default function DashboardPage() {
         <div className="mt-8 border border-ink bg-surface p-inset">
           <Caption className="text-ink">{error}</Caption>
           <Caption className="mt-2 text-ink-tertiary">
-            Check that the GateKeep API is running on port 8000.
+            Check that the GateKeep Health API is running on port 8000.
           </Caption>
         </div>
       ) : null}
@@ -120,12 +112,12 @@ export default function DashboardPage() {
         <>
           <div className="mt-10">
             <Tabs
-              label="Employee categories"
+              label="Staff categories"
               value={tab}
               onChange={setTab}
               items={[
                 { key: "active", label: "Active", count: active.length },
-                { key: "past", label: "Past", count: past.length },
+                { key: "past", label: "Offboarded", count: past.length },
               ]}
             />
           </div>
@@ -134,19 +126,20 @@ export default function DashboardPage() {
             <Table
               head={
                 <>
-                  <Th>Employee</Th>
-                  <Th>Department</Th>
-                  <Th>Role</Th>
-                  <Th>Status</Th>
-                  <Th>Accounts</Th>
-                  <Th>Risk</Th>
+                  <Th>Clinician</Th>
+                  <Th>Unit / Department</Th>
+                  <Th>Clinical Role</Th>
+                  <Th>License</Th>
+                  <Th>Credential Status</Th>
+                  <Th>Access</Th>
+                  <Th>HIPAA Risk</Th>
                 </>
               }
             >
               {loading ? (
                 [0, 1, 2].map((row) => (
                   <Tr key={row}>
-                    {[0, 1, 2, 3, 4, 5].map((cell) => (
+                    {[0, 1, 2, 3, 4, 5, 6].map((cell) => (
                       <Td key={cell}>
                         <span className="block h-3 w-full max-w-32 bg-sunken" />
                       </Td>
@@ -155,55 +148,61 @@ export default function DashboardPage() {
                 ))
               ) : visible.length === 0 ? (
                 <Tr>
-                  <Td colSpan={6} className="py-16 text-center text-ink-tertiary">
+                  <Td colSpan={7} className="py-16 text-center text-ink-tertiary">
                     {tab === "active"
-                      ? "No active employees."
-                      : "No past employees yet — nobody has been offboarded."}
+                      ? "No active clinical staff."
+                      : "No offboarded staff yet."}
                   </Td>
                 </Tr>
               ) : (
-                visible.map((employee) => (
-                  <Tr key={employee.id} href={`/employees/${employee.id}`}>
-                    <Td>
-                      {/* Carries keyboard + screen-reader access; the row
-                          handles the mouse. */}
-                      <Link
-                        href={`/employees/${employee.id}`}
-                        className="font-display text-[16px] text-ink"
-                      >
-                        {employee.full_name}
-                      </Link>
+                visible.map((s) => {
+                  const credStatus = credentialStatus(s.credential_expiry);
+                  return (
+                    <Tr key={s.id} href={`/employees/${s.id}`}>
+                      <Td>
+                        <Link
+                          href={`/employees/${s.id}`}
+                          className="font-display text-[16px] text-ink"
+                        >
+                          {s.full_name}
+                        </Link>
+                        <div className="mt-1 text-ink-tertiary">
+                          {s.company_email}
+                        </div>
+                      </Td>
 
-                      <div className="mt-1 text-ink-tertiary">
-                        {employee.company_email}
-                      </div>
-                    </Td>
+                      <Td className="text-ink-secondary">{s.department}</Td>
 
-                    <Td className="text-ink-secondary">
-                      {employee.department}
-                    </Td>
+                      <Td className="text-ink-secondary">{s.job_title}</Td>
 
-                    <Td className="text-ink-secondary">
-                      {employee.job_title}
-                    </Td>
+                      <Td className="text-ink-secondary">
+                        {s.license_type || "—"}
+                      </Td>
 
-                    <Td>
-                      <Badge level={statusLevel(employee.employment_status)}>
-                        {employee.employment_status.replace("_", " ")}
-                      </Badge>
-                    </Td>
+                      <Td>
+                        <Badge level={statusLevel(s.employment_status)}>
+                          {s.employment_status.replace("_", " ")}
+                        </Badge>
+                        {credStatus === "expired" && (
+                          <Badge level={4} className="ml-2">expired</Badge>
+                        )}
+                        {credStatus === "expiring" && (
+                          <Badge level={3} className="ml-2">exp. soon</Badge>
+                        )}
+                      </Td>
 
-                    <Td>
-                      {employee.active_accounts}/{employee.accounts_count}
-                    </Td>
+                      <Td>
+                        {s.active_accounts}/{s.accounts_count}
+                      </Td>
 
-                    <Td>
-                      <Badge level={scoreLevel(employee.risk_score)}>
-                        {employee.risk_level} · {employee.risk_score}
-                      </Badge>
-                    </Td>
-                  </Tr>
-                ))
+                      <Td>
+                        <Badge level={scoreLevel(s.risk_score)}>
+                          {s.risk_level} · {s.risk_score}
+                        </Badge>
+                      </Td>
+                    </Tr>
+                  );
+                })
               )}
             </Table>
           </div>

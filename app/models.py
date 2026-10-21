@@ -3,8 +3,10 @@ from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Tex
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
+
 def utcnow():
     return datetime.now(timezone.utc)
+
 
 class Employee(Base):
     __tablename__ = "employees"
@@ -22,15 +24,26 @@ class Employee(Base):
     last_access_review: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    # Healthcare-specific fields
+    npi_number: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    license_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    license_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    license_type: Mapped[str | None] = mapped_column(String, nullable=True)  # MD, DO, RN, LPN, PharmD, RT, NP
+    dea_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    privilege_level: Mapped[str] = mapped_column(String, default="standard")  # full, limited, supervised, standard
+    credential_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
+
     accounts = relationship("EmployeeAccount", back_populates="employee", cascade="all, delete-orphan")
     assets = relationship("CompanyAsset", back_populates="employee", cascade="all, delete-orphan")
+
 
 class EmployeeAccount(Base):
     __tablename__ = "employee_accounts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"), index=True)
     platform: Mapped[str] = mapped_column(String)
-    account_type: Mapped[str] = mapped_column(String, default="saas")
+    account_type: Mapped[str] = mapped_column(String, default="clinical_system")
     identifier: Mapped[str] = mapped_column(String)
     access_level: Mapped[str] = mapped_column(String, default="standard")
     status: Mapped[str] = mapped_column(String, default="active")
@@ -45,6 +58,7 @@ class EmployeeAccount(Base):
     sessions = relationship("AccountSession", back_populates="account", cascade="all, delete-orphan")
     credentials = relationship("Credential", back_populates="account", cascade="all, delete-orphan")
 
+
 class CompanyAsset(Base):
     __tablename__ = "company_assets"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -57,15 +71,17 @@ class CompanyAsset(Base):
     assigned_to: Mapped[str | None] = mapped_column(String, nullable=True)
     employee = relationship("Employee", back_populates="assets")
 
+
 class AccountSession(Base):
     __tablename__ = "sessions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     employee_account_id: Mapped[int] = mapped_column(ForeignKey("employee_accounts.id"), index=True)
-    session_type: Mapped[str] = mapped_column(String, default="browser")
+    session_type: Mapped[str] = mapped_column(String, default="workstation")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     account = relationship("EmployeeAccount", back_populates="sessions")
+
 
 class Credential(Base):
     __tablename__ = "credentials"
@@ -78,6 +94,7 @@ class Credential(Base):
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
     account = relationship("EmployeeAccount", back_populates="credentials")
 
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -88,6 +105,7 @@ class AuditEvent(Base):
     result: Mapped[str] = mapped_column(String)
     detail: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
 
 class TerminationRun(Base):
     __tablename__ = "termination_runs"

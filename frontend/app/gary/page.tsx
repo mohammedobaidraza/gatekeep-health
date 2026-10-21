@@ -7,38 +7,28 @@ import { Verified } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Caption, PanelTitle } from "@/components/ui/Panel";
 import { PageHeader, Shell } from "@/components/ui/Shell";
-import {
-  GaryAgentResult,
-  GaryAgentStep,
-  runGaryAgent,
-} from "@/lib/api";
+import { GaryAgentResult, GaryAgentStep, runGaryAgent } from "@/lib/api";
 
 const EXAMPLES = [
   {
-    label: "Onboarding",
-    text: "Add Omar Hassan as a software engineer. His email is omar.hassan@company.com. His manager is Alex Morgan.",
+    label: "Credentialing",
+    text: "Add Dr. Layla Hassan as an attending physician. Her email is layla.hassan@cityhealth.org. Her supervisor is Dr. Michael Roberts.",
   },
   {
     label: "Offboarding",
-    text: "Terminate Sarah Chen immediately. Revoke all access, preserve her mailbox, transfer her files to Alex Morgan, and freeze her company card.",
+    text: "Offboard Nurse James Torres immediately. Revoke all clinical system access, preserve patient records per HIPAA, and notify the department head.",
   },
 ];
 
 const STAGE_LABELS: Record<GaryAgentStep["stage"], string> = {
   parse: "Understand the instruction",
-  resolve: "Resolve the employee",
-  plan: "Build the action plan",
+  resolve: "Resolve the clinician",
+  plan: "Build the access plan",
   execute: "Execute the workflow",
   verify: "Verify the final state",
   report: "Write the report",
 };
 
-/**
- * Skeleton shown while Gary is working. The orchestrator currently emits
- * parse/resolve/plan/execute/verify — never `report` — so listing a sixth row
- * would show a step that can never complete. Once the run returns we render
- * the stages it actually reported, so a new stage appears here on its own.
- */
 const PENDING_STAGES: GaryAgentStep["stage"][] = [
   "parse",
   "resolve",
@@ -48,7 +38,7 @@ const PENDING_STAGES: GaryAgentStep["stage"][] = [
 ];
 
 const INTENT_LABELS: Record<GaryAgentResult["intent"], string> = {
-  onboard_employee: "Onboarding",
+  onboard_employee: "Credentialing",
   offboard_employee: "Offboarding",
   unknown: "Unrecognised",
 };
@@ -59,7 +49,7 @@ function titleCase(key: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export default function GaryPage() {
+export default function GracePage() {
   const [instruction, setInstruction] = useState("");
   const [result, setResult] = useState<GaryAgentResult | null>(null);
   const [running, setRunning] = useState(false);
@@ -73,18 +63,10 @@ export default function GaryPage() {
 
   async function run() {
     const cleaned = instruction.trim();
-
-    if (!cleaned) {
-      setError("Enter an onboarding or offboarding instruction.");
-      return;
-    }
+    if (!cleaned) { setError("Enter a credentialing or offboarding instruction."); return; }
 
     const token = localStorage.getItem("gatekeep_token");
-
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
+    if (!token) { window.location.href = "/login"; return; }
 
     setRunning(true);
     setError("");
@@ -94,9 +76,7 @@ export default function GaryPage() {
       setResult(await runGaryAgent(token, cleaned, true));
     } catch (cause) {
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Gary could not complete the request."
+        cause instanceof Error ? cause.message : "Grace could not complete the request."
       );
     } finally {
       setRunning(false);
@@ -118,15 +98,12 @@ export default function GaryPage() {
       }
     >
       <PageHeader
-        title="Gary"
-        subtitle="Describe an onboarding or offboarding in plain language. Gary works out the intent, does it, and verifies the result."
+        title="Grace"
+        subtitle="Describe a credentialing or offboarding in plain language. Grace works out the intent, executes it, and verifies the result."
       />
 
       <div className="mt-8 bg-surface p-inset">
-        <label
-          htmlFor="instruction"
-          className="font-ui text-ui text-ink-tertiary"
-        >
+        <label htmlFor="instruction" className="font-ui text-ui text-ink-tertiary">
           Instruction
         </label>
 
@@ -135,13 +112,12 @@ export default function GaryPage() {
           rows={6}
           value={instruction}
           onChange={(event) => setInstruction(event.target.value)}
-          placeholder="Terminate Sarah Chen immediately. Revoke all access and freeze her company card."
+          placeholder="Offboard Nurse James Torres immediately. Revoke all clinical system access and preserve patient records per HIPAA."
           className="mt-2 w-full resize-y border border-hairline p-inset font-ui text-ui leading-6 text-ink outline-none transition-colors focus:border-ink"
         />
 
         <div className="mt-4 flex flex-wrap items-center gap-4">
           <span className="font-ui text-ui text-ink-tertiary">Try</span>
-
           {EXAMPLES.map((example) => (
             <button
               key={example.label}
@@ -157,22 +133,15 @@ export default function GaryPage() {
         {error ? <Caption className="mt-4 text-ink">{error}</Caption> : null}
 
         <div className="mt-6">
-          <Button
-            variant="solid"
-            icon={ArrowRight}
-            disabled={running}
-            onClick={run}
-          >
-            {running ? "Gary is working" : "Run Gary"}
+          <Button variant="solid" icon={ArrowRight} disabled={running} onClick={run}>
+            {running ? "Grace is working" : "Run Grace"}
           </Button>
         </div>
       </div>
 
       {running || result ? (
         <section className="mt-10">
-          <PanelTitle>
-            {running ? "Working" : "Execution timeline"}
-          </PanelTitle>
+          <PanelTitle>{running ? "Working" : "Execution timeline"}</PanelTitle>
 
           <div className="mt-4 bg-surface">
             {steps.length > 0
@@ -187,11 +156,7 @@ export default function GaryPage() {
                     />
                   ))
               : PENDING_STAGES.map((stage, index) => (
-                  <StageRow
-                    key={stage}
-                    index={index}
-                    label={STAGE_LABELS[stage]}
-                  />
+                  <StageRow key={stage} index={index} label={STAGE_LABELS[stage]} />
                 ))}
           </div>
         </section>
@@ -205,31 +170,23 @@ export default function GaryPage() {
             <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-4">
               <Figure label="Intent" value={INTENT_LABELS[result.intent]} />
               <Figure label="Status" value={result.status.replace("_", " ")} />
-              <Figure
-                label="Confidence"
-                value={`${Math.round(result.confidence * 100)}%`}
-              />
+              <Figure label="Confidence" value={`${Math.round(result.confidence * 100)}%`} />
               <Figure label="Run" value={result.run_id.slice(0, 8)} />
             </div>
 
             <Caption className="mt-4 text-ink-tertiary">
               {result.employee_name
-                ? `Employee: ${result.employee_name}`
-                : "No employee could be resolved from that instruction."}
+                ? `Clinician: ${result.employee_name}`
+                : "No clinician could be resolved from that instruction."}
             </Caption>
           </section>
 
           {Object.keys(result.summary).length > 0 ? (
             <section className="mt-10">
               <PanelTitle>Proof of work</PanelTitle>
-
               <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-3">
                 {Object.entries(result.summary).map(([key, value]) => (
-                  <Figure
-                    key={key}
-                    label={titleCase(key)}
-                    value={String(value)}
-                  />
+                  <Figure key={key} label={titleCase(key)} value={String(value)} />
                 ))}
               </div>
             </section>
@@ -241,7 +198,7 @@ export default function GaryPage() {
                 href={`/employees/${result.employee_id}`}
                 className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
               >
-                View employee
+                View clinician
                 <ArrowRight size={12} strokeWidth={2} />
               </Link>
             ) : null}
@@ -269,27 +226,18 @@ function StageRow({
   step?: GaryAgentStep;
 }) {
   const muted = !step;
-
   return (
     <div className="flex items-start justify-between gap-6 border-b border-hairline px-inset py-4 last:border-b-0">
       <div className="flex items-start gap-4">
-        <span
-          className={`font-ui text-ui tabular-nums ${muted ? "text-ink-tertiary" : "text-ink-secondary"}`}
-        >
+        <span className={`font-ui text-ui tabular-nums ${muted ? "text-ink-tertiary" : "text-ink-secondary"}`}>
           {String(index + 1).padStart(2, "0")}
         </span>
-
         <div className="flex flex-col gap-1">
-          <span
-            className={`font-ui text-ui ${muted ? "text-ink-tertiary" : "text-ink"}`}
-          >
+          <span className={`font-ui text-ui ${muted ? "text-ink-tertiary" : "text-ink"}`}>
             {label}
           </span>
-
           {step?.message ? (
-            <span className="font-ui text-ui leading-5 text-ink-tertiary">
-              {step.message}
-            </span>
+            <span className="font-ui text-ui leading-5 text-ink-tertiary">{step.message}</span>
           ) : null}
         </div>
       </div>
@@ -297,11 +245,7 @@ function StageRow({
       {step?.status === "verified" ? (
         <Verified />
       ) : (
-        <span
-          className={`font-ui text-ui whitespace-nowrap ${
-            step?.status === "failed" ? "text-ink" : "text-ink-tertiary"
-          }`}
-        >
+        <span className={`font-ui text-ui whitespace-nowrap ${step?.status === "failed" ? "text-ink" : "text-ink-tertiary"}`}>
           {step ? step.status.replace("_", " ") : "—"}
         </span>
       )}
@@ -313,9 +257,7 @@ function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-2 bg-surface p-inset">
       <span className="font-ui text-ui text-ink-tertiary">{label}</span>
-      <span className="font-display text-[24px] leading-none break-words">
-        {value}
-      </span>
+      <span className="font-display text-[24px] leading-none break-words">{value}</span>
     </div>
   );
 }

@@ -9,11 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { LabeledInput } from "@/components/ui/Field";
 import { Caption, PanelTitle } from "@/components/ui/Panel";
 import { PageHeader, Shell } from "@/components/ui/Shell";
-import {
-  AccessTemplate,
-  createEmployee,
-  getAccessTemplates,
-} from "@/lib/api";
+import { AccessTemplate, createEmployee, getAccessTemplates } from "@/lib/api";
 
 type FormState = {
   full_name: string;
@@ -23,6 +19,14 @@ type FormState = {
   manager_name: string;
   start_date: string;
   access_template: string;
+  // Healthcare fields
+  npi_number: string;
+  license_number: string;
+  license_state: string;
+  license_type: string;
+  dea_number: string;
+  privilege_level: string;
+  credential_expiry: string;
 };
 
 const initialForm: FormState = {
@@ -32,8 +36,23 @@ const initialForm: FormState = {
   job_title: "",
   manager_name: "",
   start_date: new Date().toISOString().split("T")[0],
-  access_template: "software_engineer",
+  access_template: "physician",
+  npi_number: "",
+  license_number: "",
+  license_state: "",
+  license_type: "",
+  dea_number: "",
+  privilege_level: "standard",
+  credential_expiry: "",
 };
+
+const LICENSE_TYPES = ["MD", "DO", "RN", "LPN", "NP", "PA", "PharmD", "RT", "DDS", "Other"];
+const PRIVILEGE_LEVELS = [
+  { value: "full",       label: "Full privileges" },
+  { value: "limited",    label: "Limited privileges" },
+  { value: "supervised", label: "Supervised (trainee)" },
+  { value: "standard",   label: "Standard (non-clinical)" },
+];
 
 export default function NewEmployeePage() {
   const router = useRouter();
@@ -46,37 +65,22 @@ export default function NewEmployeePage() {
 
   useEffect(() => {
     const token = localStorage.getItem("gatekeep_token");
-
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
+    if (!token) { window.location.href = "/login"; return; }
 
     let cancelled = false;
-
     getAccessTemplates(token)
-      .then((data) => {
-        if (cancelled) return;
-        setTemplates(data);
-        setLoading(false);
-      })
+      .then((data) => { if (!cancelled) { setTemplates(data); setLoading(false); } })
       .catch((cause) => {
-        if (cancelled) return;
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Failed to load role templates"
-        );
-        setLoading(false);
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "Failed to load role templates");
+          setLoading(false);
+        }
       });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const selected = useMemo(
-    () => templates.find((template) => template.key === form.access_template),
+    () => templates.find((t) => t.key === form.access_template),
     [templates, form.access_template]
   );
 
@@ -88,10 +92,8 @@ export default function NewEmployeePage() {
     setForm((current) => ({
       ...current,
       access_template: template.key,
-      // Job title follows the role unless the user has typed their own.
       job_title:
-        !current.job_title ||
-        templates.some((item) => item.name === current.job_title)
+        !current.job_title || templates.some((t) => t.name === current.job_title)
           ? template.name
           : current.job_title,
     }));
@@ -99,24 +101,15 @@ export default function NewEmployeePage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     const token = localStorage.getItem("gatekeep_token");
-
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    if (!selected) {
-      setError("Select an access role.");
-      return;
-    }
+    if (!token) { window.location.href = "/login"; return; }
+    if (!selected) { setError("Select a clinical role."); return; }
 
     setSubmitting(true);
     setError("");
 
     try {
-      const employee = await createEmployee(token, {
+      const clinician = await createEmployee(token, {
         full_name: form.full_name,
         company_email: form.company_email,
         personal_email: form.personal_email || undefined,
@@ -125,16 +118,19 @@ export default function NewEmployeePage() {
         manager_name: form.manager_name || undefined,
         start_date: form.start_date || undefined,
         employment_status: "active",
-        google_workspace_email: form.company_email || undefined,
         auto_provision: true,
         access_template: selected.key,
+        npi_number: form.npi_number || undefined,
+        license_number: form.license_number || undefined,
+        license_state: form.license_state || undefined,
+        license_type: form.license_type || undefined,
+        dea_number: form.dea_number || undefined,
+        privilege_level: form.privilege_level || undefined,
+        credential_expiry: form.credential_expiry || undefined,
       });
-
-      router.push(`/employees/${employee.id}`);
+      router.push(`/employees/${clinician.id}`);
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Failed to create employee"
-      );
+      setError(cause instanceof Error ? cause.message : "Failed to credential clinician");
       setSubmitting(false);
     }
   }
@@ -152,64 +148,60 @@ export default function NewEmployeePage() {
       }
     >
       <PageHeader
-        title="Add employee"
-        subtitle="Pick a role, check what it grants, and provision every account in one step."
+        title="Add clinician"
+        subtitle="Select a clinical role, review what it grants, and provision all system access in one step."
       />
 
       {loading ? (
-        <Caption className="mt-8">Loading role templates…</Caption>
+        <Caption className="mt-8">Loading clinical role templates…</Caption>
       ) : (
         <form onSubmit={handleSubmit} className="mt-8">
           <div className="grid gap-10 lg:grid-cols-[1fr_1fr]">
-            <section>
-              <PanelTitle>Role</PanelTitle>
+            {/* Left — Role + preview */}
+            <div className="flex flex-col gap-10">
+              <section>
+                <PanelTitle>Clinical role</PanelTitle>
+                <Caption className="mt-2 text-ink-tertiary">
+                  Determines the department and the clinical systems provisioned.
+                </Caption>
 
-              <Caption className="mt-2 text-ink-tertiary">
-                Determines the department and the accounts provisioned.
-              </Caption>
-
-              <div className="mt-4 bg-surface">
-                {templates.map((template) => {
-                  const active = template.key === form.access_template;
-
-                  return (
-                    <button
-                      key={template.key}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => selectTemplate(template)}
-                      className={`flex w-full flex-col gap-1 border-b border-l-2 border-hairline px-inset py-4 text-left transition-colors last:border-b-0 ${
-                        active
-                          ? "border-l-pop bg-sunken"
-                          : "border-l-transparent hover:bg-sunken"
-                      }`}
-                    >
-                      <span className="flex items-baseline justify-between gap-4">
-                        <span
-                          className={`font-ui text-ui ${active ? "text-ink" : "text-ink-secondary"}`}
-                        >
-                          {template.name}
+                <div className="mt-4 bg-surface">
+                  {templates.map((template) => {
+                    const active = template.key === form.access_template;
+                    return (
+                      <button
+                        key={template.key}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => selectTemplate(template)}
+                        className={`flex w-full flex-col gap-1 border-b border-l-2 border-hairline px-inset py-4 text-left transition-colors last:border-b-0 ${
+                          active
+                            ? "border-l-pop bg-sunken"
+                            : "border-l-transparent hover:bg-sunken"
+                        }`}
+                      >
+                        <span className="flex items-baseline justify-between gap-4">
+                          <span className={`font-ui text-ui ${active ? "text-ink" : "text-ink-secondary"}`}>
+                            {template.name}
+                          </span>
+                          <span className="font-ui text-ui text-ink-tertiary">
+                            {template.accounts.length} systems
+                          </span>
                         </span>
-
-                        <span className="font-ui text-ui text-ink-tertiary">
-                          {template.accounts.length} apps
+                        <span className="font-ui text-ui leading-5 text-ink-tertiary">
+                          {template.description}
                         </span>
-                      </span>
-
-                      <span className="font-ui text-ui leading-5 text-ink-tertiary">
-                        {template.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
 
               {selected ? (
-                <div className="mt-8">
-                  <PanelTitle>Will be provisioned</PanelTitle>
-
+                <section>
+                  <PanelTitle>Systems to be provisioned</PanelTitle>
                   <Caption className="mt-2 text-ink-tertiary">
-                    {selected.department} · {selected.accounts.length} accounts
+                    {selected.department} · {selected.accounts.length} clinical systems
                   </Caption>
 
                   <div className="mt-4 bg-surface">
@@ -219,9 +211,7 @@ export default function NewEmployeePage() {
                         className="flex items-center justify-between gap-4 border-b border-hairline px-inset py-3 last:border-b-0"
                       >
                         <div className="flex flex-col gap-1">
-                          <span className="font-ui text-ui text-ink">
-                            {account.platform}
-                          </span>
+                          <span className="font-ui text-ui text-ink">{account.platform}</span>
                           <span className="font-ui text-ui text-ink-tertiary">
                             {account.access}
                             {account.credentials.length > 0
@@ -229,23 +219,19 @@ export default function NewEmployeePage() {
                               : ""}
                           </span>
                         </div>
-
-                        <Badge level={riskLevel(account.risk)}>
-                          {account.risk}
-                        </Badge>
+                        <Badge level={riskLevel(account.risk)}>{account.risk}</Badge>
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               ) : null}
-            </section>
+            </div>
 
+            {/* Right — Details */}
             <section>
-              <PanelTitle>Details</PanelTitle>
-
+              <PanelTitle>Identity & credentials</PanelTitle>
               <Caption className="mt-2 text-ink-tertiary">
-                Company email becomes the identity across every provisioned
-                account.
+                Company email becomes the identity across every provisioned clinical system.
               </Caption>
 
               <div className="mt-4 flex flex-col gap-6 bg-surface p-inset">
@@ -253,50 +239,127 @@ export default function NewEmployeePage() {
                   label="Full name"
                   required
                   value={form.full_name}
-                  onChange={(event) => update("full_name", event.target.value)}
+                  onChange={(e) => update("full_name", e.target.value)}
                 />
-
                 <LabeledInput
                   label="Company email"
                   type="email"
                   required
                   value={form.company_email}
-                  onChange={(event) =>
-                    update("company_email", event.target.value)
-                  }
+                  onChange={(e) => update("company_email", e.target.value)}
                 />
-
                 <LabeledInput
                   label="Personal email"
                   type="email"
                   hint="Used to reach them after offboarding."
                   value={form.personal_email}
-                  onChange={(event) =>
-                    update("personal_email", event.target.value)
-                  }
+                  onChange={(e) => update("personal_email", e.target.value)}
                 />
-
                 <LabeledInput
                   label="Job title"
                   required
                   value={form.job_title}
-                  onChange={(event) => update("job_title", event.target.value)}
+                  onChange={(e) => update("job_title", e.target.value)}
                 />
-
                 <LabeledInput
-                  label="Manager"
-                  hint="Files transfer here if they're offboarded."
+                  label="Supervisor / Manager"
+                  hint="Patient records transfer here if offboarded."
                   value={form.manager_name}
-                  onChange={(event) =>
-                    update("manager_name", event.target.value)
-                  }
+                  onChange={(e) => update("manager_name", e.target.value)}
                 />
-
                 <LabeledInput
                   label="Start date"
                   type="date"
                   value={form.start_date}
-                  onChange={(event) => update("start_date", event.target.value)}
+                  onChange={(e) => update("start_date", e.target.value)}
+                />
+              </div>
+
+              {/* Healthcare credential fields */}
+              <PanelTitle className="mt-8">Licensure & credentialing</PanelTitle>
+              <Caption className="mt-2 text-ink-tertiary">
+                Required for prescribers, licensed clinicians, and DEA registrants.
+              </Caption>
+
+              <div className="mt-4 flex flex-col gap-6 bg-surface p-inset">
+                <LabeledInput
+                  label="NPI number"
+                  hint="10-digit National Provider Identifier."
+                  value={form.npi_number}
+                  onChange={(e) => update("npi_number", e.target.value)}
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <LabeledInput
+                    label="License number"
+                    value={form.license_number}
+                    onChange={(e) => update("license_number", e.target.value)}
+                  />
+                  <LabeledInput
+                    label="License state"
+                    hint="2-letter code, e.g. CA"
+                    value={form.license_state}
+                    onChange={(e) => update("license_state", e.target.value.toUpperCase().slice(0, 2))}
+                  />
+                </div>
+
+                <div>
+                  <span className="block font-ui text-ui text-ink-tertiary">License type</span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {LICENSE_TYPES.map((lt) => (
+                      <button
+                        key={lt}
+                        type="button"
+                        onClick={() => update("license_type", lt === form.license_type ? "" : lt)}
+                        className={`border px-3 py-1 font-ui text-ui transition-colors ${
+                          form.license_type === lt
+                            ? "border-brand bg-brand text-surface"
+                            : "border-hairline text-ink-secondary hover:border-hairline-strong"
+                        }`}
+                      >
+                        {lt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <LabeledInput
+                  label="DEA number"
+                  hint="Required for prescribers and pharmacists."
+                  value={form.dea_number}
+                  onChange={(e) => update("dea_number", e.target.value)}
+                />
+
+                <div>
+                  <span className="block font-ui text-ui text-ink-tertiary">Privilege level</span>
+                  <div className="mt-2 flex flex-col gap-1 bg-surface">
+                    {PRIVILEGE_LEVELS.map((pl) => (
+                      <button
+                        key={pl.value}
+                        type="button"
+                        onClick={() => update("privilege_level", pl.value)}
+                        className={`flex w-full items-center gap-3 border-b border-hairline px-inset py-3 text-left transition-colors last:border-b-0 ${
+                          form.privilege_level === pl.value
+                            ? "bg-sunken"
+                            : "hover:bg-sunken"
+                        }`}
+                      >
+                        <span className={`font-ui text-ui ${
+                          form.privilege_level === pl.value ? "text-ink" : "text-ink-secondary"
+                        }`}>
+                          {pl.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <LabeledInput
+                  label="Credential expiry"
+                  type="date"
+                  hint="When the license or privileging expires."
+                  value={form.credential_expiry}
+                  onChange={(e) => update("credential_expiry", e.target.value)}
                 />
               </div>
 
@@ -312,8 +375,8 @@ export default function NewEmployeePage() {
                   disabled={submitting}
                 >
                   {submitting
-                    ? "Provisioning"
-                    : `Create and provision ${selected?.accounts.length ?? 0} accounts`}
+                    ? "Credentialing"
+                    : `Credential and provision ${selected?.accounts.length ?? 0} systems`}
                 </Button>
 
                 <Link

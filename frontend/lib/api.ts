@@ -1,7 +1,7 @@
-// Matches the port in the backend README (`uvicorn --port 8000`).
-// Override with NEXT_PUBLIC_API_URL in frontend/.env.local if you run it elsewhere.
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export type EmployeeSummary = {
   id: number;
@@ -15,6 +15,11 @@ export type EmployeeSummary = {
   active_accounts: number;
   risk_score: number;
   risk_level: string;
+  // Healthcare fields
+  npi_number: string | null;
+  license_type: string | null;
+  privilege_level: string;
+  credential_expiry: string | null;
 };
 
 export type EmployeeDetail = EmployeeSummary & {
@@ -28,6 +33,10 @@ export type EmployeeDetail = EmployeeSummary & {
   owned_assets: number;
   created_at: string;
   updated_at: string;
+  // Healthcare detail
+  license_number: string | null;
+  license_state: string | null;
+  dea_number: string | null;
 };
 
 export type EmployeeAccount = {
@@ -46,6 +55,21 @@ export type EmployeeAccount = {
   metadata: Record<string, unknown>;
 };
 
+export type UserRole =
+  | "system_admin"
+  | "department_head"
+  | "staff_coordinator"
+  | "compliance_officer";
+
+export type AuthUser = {
+  email: string;
+  name: string;
+  role: UserRole;
+  permissions?: Record<string, boolean>;
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
 async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
@@ -60,14 +84,12 @@ async function apiRequest<T>(
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
-
     try {
       const body = await response.json();
       message = body.detail || message;
     } catch {
       // Response did not contain JSON.
     }
-
     throw new Error(message);
   }
 
@@ -75,25 +97,23 @@ async function apiRequest<T>(
 }
 
 function authHeaders(token: string) {
-  return {
-    Authorization: `Bearer ${token}`,
-  };
+  return { Authorization: `Bearer ${token}` };
 }
+
+// ── Auth ───────────────────────────────────────────────────────────────────────
 
 export async function login(email: string, password: string) {
   return apiRequest<{
     access_token: string;
     token_type: string;
-    user: {
-      email: string;
-      name: string;
-      role: string;
-    };
+    user: AuthUser;
   }>("/api/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
 }
+
+// ── Staff (Employees) ──────────────────────────────────────────────────────────
 
 export async function getEmployees(token: string) {
   return apiRequest<EmployeeSummary[]>("/api/v1/employees", {
@@ -103,48 +123,59 @@ export async function getEmployees(token: string) {
 }
 
 export async function getEmployee(token: string, employeeId: string) {
-  return apiRequest<EmployeeDetail>(
-    `/api/v1/employees/${employeeId}`,
-    {
-      headers: authHeaders(token),
-      cache: "no-store",
-    }
-  );
+  return apiRequest<EmployeeDetail>(`/api/v1/employees/${employeeId}`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
 }
 
-export async function getEmployeeAccounts(
-  token: string,
-  employeeId: string
-) {
+export type CreateEmployeeInput = {
+  full_name: string;
+  company_email: string;
+  personal_email?: string;
+  department: string;
+  job_title: string;
+  manager_name?: string;
+  start_date?: string;
+  employment_status: string;
+  auto_provision: boolean;
+  access_template: string;
+  // Healthcare fields
+  npi_number?: string;
+  license_number?: string;
+  license_state?: string;
+  license_type?: string;
+  dea_number?: string;
+  privilege_level?: string;
+  credential_expiry?: string;
+};
+
+export async function createEmployee(token: string, input: CreateEmployeeInput) {
+  return apiRequest<EmployeeDetail>("/api/v1/employees", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
+}
+
+// ── Accounts ───────────────────────────────────────────────────────────────────
+
+export async function getEmployeeAccounts(token: string, employeeId: string) {
   return apiRequest<EmployeeAccount[]>(
     `/api/v1/employees/${employeeId}/accounts`,
-    {
-      headers: authHeaders(token),
-      cache: "no-store",
-    }
+    { headers: authHeaders(token), cache: "no-store" }
   );
 }
 
-export async function revokeAccount(
-  token: string,
-  accountId: number
-) {
-  return apiRequest<EmployeeAccount>(
-    `/api/v1/accounts/${accountId}/revoke`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({
-        reason: "Revoked through GateKeep dashboard",
-      }),
-    }
-  );
+export async function revokeAccount(token: string, accountId: number) {
+  return apiRequest<EmployeeAccount>(`/api/v1/accounts/${accountId}/revoke`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ reason: "Revoked through GateKeep Health" }),
+  });
 }
 
-export async function verifyAccount(
-  token: string,
-  accountId: number
-) {
+export async function verifyAccount(token: string, accountId: number) {
   return apiRequest<{
     account_id: number;
     verified: boolean;
@@ -157,10 +188,26 @@ export async function verifyAccount(
   });
 }
 
-export async function getTerminationPreview(
-  token: string,
-  employeeId: string
-) {
+export async function restoreAccount(token: string, accountId: number) {
+  return apiRequest<{
+    id: number;
+    employee_id: number;
+    platform: string;
+    identifier: string;
+    status: string;
+    revocation_verified: boolean;
+    sessions_restored: boolean;
+    credentials_restored: boolean;
+    message: string;
+  }>(`/api/v1/accounts/${accountId}/restore`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+// ── Termination / Offboarding ──────────────────────────────────────────────────
+
+export async function getTerminationPreview(token: string, employeeId: string) {
   return apiRequest<{
     employee_id: number;
     employee: string;
@@ -175,19 +222,13 @@ export async function getTerminationPreview(
       identifier: string;
       planned_action: string;
     }>;
-  }>(
-    `/api/v1/employees/${employeeId}/termination/preview`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-    }
-  );
+  }>(`/api/v1/employees/${employeeId}/termination/preview`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
 }
 
-export async function terminateEmployee(
-  token: string,
-  employeeId: string
-) {
+export async function terminateEmployee(token: string, employeeId: string) {
   return apiRequest<{
     status: string;
     summary: {
@@ -205,18 +246,21 @@ export async function terminateEmployee(
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({
-      preserve_mailbox: true,
+      preserve_records: true,
       transfer_files_to_manager: true,
       preserve_audit_logs: true,
       reassign_owned_projects: true,
       revoke_sessions: true,
       disable_company_email: true,
       remove_group_memberships: true,
-      revoke_saas_accounts: true,
-      revoke_api_tokens: true,
+      revoke_system_accounts: true,
+      revoke_credentials: true,
       disable_vpn: true,
       remove_cloud_access: true,
       freeze_company_card: true,
+      notify_medical_staff_office: true,
+      revoke_dea_system_access: true,
+      revoke_prescribing_access: true,
     }),
   });
 }
@@ -224,6 +268,40 @@ export async function terminateEmployee(
 export type TerminationSummary = Awaited<
   ReturnType<typeof terminateEmployee>
 >["summary"];
+
+export async function reactivateEmployee(token: string, employeeId: string) {
+  return apiRequest<{
+    status: string;
+    employee: EmployeeDetail;
+    accounts_restored: number;
+    sessions_restored: boolean;
+    credentials_restored: boolean;
+    message: string;
+  }>(`/api/v1/employees/${employeeId}/reactivate`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export async function getTerminationReport(token: string, employeeId: string) {
+  return apiRequest<{
+    employee: EmployeeDetail;
+    latest_termination: {
+      id: number;
+      actor: string;
+      effective_at: string;
+      status: string;
+      summary: TerminationSummary;
+      created_at: string;
+    } | null;
+    accounts: EmployeeAccount[];
+  }>(`/api/v1/employees/${employeeId}/termination-report`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+}
+
+// ── Assets ─────────────────────────────────────────────────────────────────────
 
 export type CompanyAsset = {
   id: number;
@@ -249,21 +327,18 @@ export async function freezeAsset(token: string, assetId: number) {
   );
 }
 
-export async function transferAsset(
-  token: string,
-  assetId: number,
-  assignedTo: string
-) {
-  return apiRequest<{
-    id: number;
-    status: string;
-    assigned_to: string;
-  }>(`/api/v1/assets/${assetId}/transfer`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ assigned_to: assignedTo }),
-  });
+export async function transferAsset(token: string, assetId: number, assignedTo: string) {
+  return apiRequest<{ id: number; status: string; assigned_to: string }>(
+    `/api/v1/assets/${assetId}/transfer`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ assigned_to: assignedTo }),
+    }
+  );
 }
+
+// ── Audit Events ───────────────────────────────────────────────────────────────
 
 export type AuditEvent = {
   id: number;
@@ -275,74 +350,14 @@ export type AuditEvent = {
   created_at: string;
 };
 
-export async function getAuditEvents(
-  token: string,
-  employeeId: string
-) {
+export async function getAuditEvents(token: string, employeeId: string) {
   return apiRequest<AuditEvent[]>(
     `/api/v1/employees/${employeeId}/audit-events`,
     { headers: authHeaders(token), cache: "no-store" }
   );
 }
 
-export async function getTerminationReport(
-  token: string,
-  employeeId: string
-) {
-  return apiRequest<{
-    employee: EmployeeDetail;
-    latest_termination: {
-      id: number;
-      actor: string;
-      effective_at: string;
-      status: string;
-      summary: TerminationSummary;
-      created_at: string;
-    } | null;
-    accounts: EmployeeAccount[];
-  }>(`/api/v1/employees/${employeeId}/termination-report`, {
-    headers: authHeaders(token),
-    cache: "no-store",
-  });
-}
-
-export async function restoreAccount(
-  token: string,
-  accountId: number
-) {
-  return apiRequest<{
-    id: number;
-    employee_id: number;
-    platform: string;
-    identifier: string;
-    status: string;
-    revocation_verified: boolean;
-    sessions_restored: boolean;
-    credentials_restored: boolean;
-    message: string;
-  }>(`/api/v1/accounts/${accountId}/restore`, {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-}
-
-export async function reactivateEmployee(
-  token: string,
-  employeeId: string
-) {
-  return apiRequest<{
-    status: string;
-    employee: EmployeeDetail;
-    accounts_restored: number;
-    sessions_restored: boolean;
-    credentials_restored: boolean;
-    message: string;
-  }>(`/api/v1/employees/${employeeId}/reactivate`, {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-}
-
+// ── Access Templates ───────────────────────────────────────────────────────────
 
 export type AccessTemplate = {
   key: string;
@@ -358,75 +373,27 @@ export type AccessTemplate = {
   }>;
 };
 
-export type CreateEmployeeInput = {
-  full_name: string;
-  company_email: string;
-  personal_email?: string;
-  department: string;
-  job_title: string;
-  manager_name?: string;
-  start_date?: string;
-  employment_status: string;
-  github_username?: string;
-  microsoft_username?: string;
-  google_workspace_email?: string;
-  auto_provision: boolean;
-  access_template: string;
-};
-
 export async function getAccessTemplates(token: string) {
-  return apiRequest<AccessTemplate[]>(
-    "/api/v1/access-templates",
-    {
-      headers: authHeaders(token),
-      cache: "no-store",
-    }
-  );
-}
-
-export async function createEmployee(
-  token: string,
-  input: CreateEmployeeInput
-) {
-  return apiRequest<EmployeeDetail>("/api/v1/employees", {
-    method: "POST",
+  return apiRequest<AccessTemplate[]>("/api/v1/access-templates", {
     headers: authHeaders(token),
-    body: JSON.stringify(input),
+    cache: "no-store",
   });
 }
 
+// ── Grace (AI Agent) ───────────────────────────────────────────────────────────
 
 export type GaryAgentStep = {
   sequence: number;
-  stage:
-    | "parse"
-    | "resolve"
-    | "plan"
-    | "execute"
-    | "verify"
-    | "report";
-  status:
-    | "pending"
-    | "running"
-    | "completed"
-    | "verified"
-    | "failed"
-    | "needs_input";
+  stage: "parse" | "resolve" | "plan" | "execute" | "verify" | "report";
+  status: "pending" | "running" | "completed" | "verified" | "failed" | "needs_input";
   message: string;
   evidence: Record<string, unknown>;
 };
 
 export type GaryAgentResult = {
   run_id: string;
-  intent:
-    | "onboard_employee"
-    | "offboard_employee"
-    | "unknown";
-  status:
-    | "planned"
-    | "completed"
-    | "failed"
-    | "needs_input";
+  intent: "onboard_employee" | "offboard_employee" | "unknown";
+  status: "planned" | "completed" | "failed" | "needs_input";
   employee_id: number | null;
   employee_name: string | null;
   confidence: number;
@@ -438,17 +405,11 @@ export type GaryAgentResult = {
 export async function runGaryAgent(
   token: string,
   instruction: string,
-  autoExecute = true,
+  autoExecute = true
 ): Promise<GaryAgentResult> {
-  return apiRequest<GaryAgentResult>(
-    "/api/v1/agent/run",
-    {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({
-        instruction,
-        auto_execute: autoExecute,
-      }),
-    },
-  );
+  return apiRequest<GaryAgentResult>("/api/v1/agent/run", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ instruction, auto_execute: autoExecute }),
+  });
 }

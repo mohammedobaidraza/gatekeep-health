@@ -1,12 +1,8 @@
 /**
- * Brand marks, traced from Figma (logo-mark 15:94, wordmark 15:92).
- *
- * Both draw with `currentColor` rather than the literal #D7F23E in the Figma
- * export, so the same component works on the dark-green hero (pop green) and
- * on the white app header (dark green). Pop green on white is unreadable.
+ * Brand marks for GateKeep Health.
+ * Draws with `currentColor` so the same component works on dark and light backgrounds.
  */
 
-/** Path and geometry are the Figma export, unscaled. */
 const MARK_VIEWBOX = "0 0 38.983 52";
 const MARK_RATIO = 38.983 / 52;
 const MARK_PATH =
@@ -17,13 +13,7 @@ export function GarryMark({
   withEye = false,
   className,
 }: {
-  /** Height in px; width follows the mark's ratio. */
   size?: number;
-  /**
-   * The animation's Gary has an eye (node 9:69); the wordmark's glyph does
-   * not (node 15:94). Kept optional so the loading sequence can drop it as it
-   * morphs into the header.
-   */
   withEye?: boolean;
   className?: string;
 }) {
@@ -49,10 +39,6 @@ export function GarryMark({
   );
 }
 
-/**
- * The full wordmark: the mark stands in for the G, then "atekeep".
- * Figma proportions — mark 48 tall, text 49px, 4.97px gap.
- */
 export function Logo({
   size = 22,
   className,
@@ -71,10 +57,11 @@ export function Logo({
         className="font-display leading-none"
         style={{ fontSize: size * (49 / 48) }}
       >
-        atekeep
+        atekeep{" "}
+        <span style={{ opacity: 0.55 }}>Health</span>
       </span>
 
-      <span className="sr-only">GateKeep</span>
+      <span className="sr-only">GateKeep Health</span>
     </span>
   );
 }

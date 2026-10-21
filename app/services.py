@@ -7,245 +7,261 @@ from app.models import AccountSession, AuditEvent, CompanyAsset, Credential, Emp
 
 def utcnow(): return datetime.now(timezone.utc)
 
+
 def audit(db: Session, employee_id: int | None, actor: str, action: str, target: str, result: str, detail: str = ""):
     db.add(AuditEvent(employee_id=employee_id, actor=actor, action=action, target=target, result=result, detail=detail))
     db.commit()
 
-def add_account(db: Session, employee: Employee, platform: str, identifier: str, access: str="standard", risk: str="low", account_type: str="saas", metadata: dict | None=None, sessions: int=1, credentials: list[str] | None=None):
-    a=EmployeeAccount(employee_id=employee.id, platform=platform, account_type=account_type, identifier=identifier, access_level=access, status="active", last_used_at=utcnow()-timedelta(hours=3), risk_level=risk, metadata_json=json.dumps(metadata or {}))
+
+def add_account(db: Session, employee: Employee, platform: str, identifier: str, access: str = "standard", risk: str = "low", account_type: str = "clinical_system", metadata: dict | None = None, sessions: int = 1, credentials: list[str] | None = None):
+    a = EmployeeAccount(
+        employee_id=employee.id,
+        platform=platform,
+        account_type=account_type,
+        identifier=identifier,
+        access_level=access,
+        status="active",
+        last_used_at=utcnow() - timedelta(hours=3),
+        risk_level=risk,
+        metadata_json=json.dumps(metadata or {}),
+    )
     db.add(a); db.flush()
-    for i in range(sessions): db.add(AccountSession(employee_account_id=a.id, session_type="browser" if i==0 else "mobile", active=True, last_seen_at=utcnow()-timedelta(minutes=15+i*20)))
-    for c in credentials or []: db.add(Credential(employee_account_id=a.id, credential_type=c, status="active", metadata_json="{}"))
+    for i in range(sessions):
+        db.add(AccountSession(
+            employee_account_id=a.id,
+            session_type="workstation" if i == 0 else "mobile",
+            active=True,
+            last_seen_at=utcnow() - timedelta(minutes=15 + i * 20),
+        ))
+    for c in credentials or []:
+        db.add(Credential(employee_account_id=a.id, credential_type=c, status="active", metadata_json="{}"))
     return a
 
+
 ACCESS_TEMPLATES = {
-    "software_engineer": {
-        "name": "Software Engineer",
-        "department": "Engineering",
-        "description": "Development, cloud, source control, project tracking, and secure network access.",
+    "physician": {
+        "name": "Physician (MD/DO)",
+        "department": "Clinical Medicine",
+        "description": "Epic attending access, PACS imaging, e-prescribing with DEA, care coordination, and telemedicine.",
         "accounts": [
-            {"platform": "Google Workspace", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": ["OAuth grant"]},
-            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 2, "credentials": []},
-            {"platform": "GitHub", "access": "Developer", "risk": "high", "sessions": 1, "credentials": ["Personal access token"]},
-            {"platform": "Jira", "access": "Developer", "risk": "medium", "sessions": 1, "credentials": []},
-            {"platform": "AWS", "access": "Developer", "risk": "high", "sessions": 1, "credentials": ["Access key"]},
-            {"platform": "VPN", "access": "Engineering", "risk": "high", "sessions": 1, "credentials": ["VPN certificate"]},
+            {"platform": "Epic EMR", "access": "Attending Physician", "risk": "critical", "sessions": 2, "credentials": ["Smart card", "RSA token"]},
+            {"platform": "PACS (Imaging)", "access": "Radiologist View", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "eRx / Surescripts", "access": "Prescriber", "risk": "critical", "sessions": 1, "credentials": ["DEA certificate"]},
+            {"platform": "Care Coordination Portal", "access": "Attending", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Telemedicine Platform", "access": "Provider", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Clinical Decision Support", "access": "Standard", "risk": "low", "sessions": 1, "credentials": []},
         ],
     },
-    "designer": {
-        "name": "Designer",
-        "department": "Design",
-        "description": "Design, collaboration, creative software, and brand asset access.",
+    "nurse": {
+        "name": "Registered Nurse (RN)",
+        "department": "Clinical Nursing",
+        "description": "Epic nursing module, medication administration record, PYXIS dispensing, patient monitoring, and care communication.",
         "accounts": [
-            {"platform": "Google Workspace", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": ["OAuth grant"]},
-            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 2, "credentials": []},
-            {"platform": "Figma", "access": "Editor", "risk": "medium", "sessions": 1, "credentials": []},
-            {"platform": "Notion", "access": "Member", "risk": "low", "sessions": 1, "credentials": []},
-            {"platform": "Adobe Creative Cloud", "access": "Licensed User", "risk": "medium", "sessions": 1, "credentials": []},
-            {"platform": "Brand Library", "access": "Editor", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Epic EMR", "access": "RN Nursing", "risk": "high", "sessions": 2, "credentials": ["Smart card"]},
+            {"platform": "MAR (Medication Admin)", "access": "Nurse", "risk": "critical", "sessions": 1, "credentials": ["Badge scan"]},
+            {"platform": "Patient Monitoring", "access": "Bedside RN", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "PYXIS (Medication Dispense)", "access": "RN Access", "risk": "high", "sessions": 1, "credentials": ["Fingerprint"]},
+            {"platform": "Care Communication", "access": "Staff", "risk": "low", "sessions": 2, "credentials": []},
         ],
     },
-    "finance": {
-        "name": "Finance",
-        "department": "Finance",
-        "description": "Accounting, payments, expense management, reporting, and finance document access.",
+    "pharmacist": {
+        "name": "Pharmacist (PharmD)",
+        "department": "Pharmacy",
+        "description": "Pharmacy management system, PYXIS admin, controlled substance tracking, DEA integration, and drug interaction database.",
         "accounts": [
-            {"platform": "Microsoft 365", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": []},
-            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 1, "credentials": []},
-            {"platform": "QuickBooks", "access": "Accountant", "risk": "high", "sessions": 1, "credentials": []},
-            {"platform": "Ramp", "access": "Cardholder", "risk": "high", "sessions": 1, "credentials": []},
-            {"platform": "Google Drive", "access": "Finance Editor", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Pharmacy Management System", "access": "Staff Pharmacist", "risk": "critical", "sessions": 2, "credentials": ["Smart card"]},
+            {"platform": "PYXIS (Medication Dispense)", "access": "Admin", "risk": "critical", "sessions": 1, "credentials": ["Smart card"]},
+            {"platform": "Controlled Substance Monitor", "access": "Pharmacist", "risk": "critical", "sessions": 1, "credentials": ["DEA certificate"]},
+            {"platform": "Epic EMR", "access": "Pharmacy", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Drug Interaction Database", "access": "Standard", "risk": "low", "sessions": 1, "credentials": []},
         ],
     },
-    "data_analyst": {
-        "name": "Data Analyst",
-        "department": "Data",
-        "description": "Analytics, dashboards, databases, notebooks, and reporting access.",
+    "radiology_tech": {
+        "name": "Radiology Technician (RT)",
+        "department": "Radiology",
+        "description": "PACS, RIS, imaging workstations, radiation safety tracking, and scheduling.",
         "accounts": [
-            {"platform": "Google Workspace", "access": "Standard", "risk": "medium", "sessions": 2, "credentials": ["OAuth grant"]},
-            {"platform": "Slack", "access": "Member", "risk": "low", "sessions": 2, "credentials": []},
-            {"platform": "Tableau", "access": "Creator", "risk": "medium", "sessions": 1, "credentials": []},
-            {"platform": "Snowflake", "access": "Analyst", "risk": "high", "sessions": 1, "credentials": ["Service credential"]},
-            {"platform": "JupyterHub", "access": "User", "risk": "medium", "sessions": 1, "credentials": []},
-            {"platform": "GitHub", "access": "Read", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "PACS (Imaging)", "access": "RT Technician", "risk": "high", "sessions": 2, "credentials": ["Smart card"]},
+            {"platform": "RIS (Radiology Info System)", "access": "Technologist", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Radiation Safety Tracking", "access": "Staff", "risk": "medium", "sessions": 1, "credentials": ["Dosimeter ID"]},
+            {"platform": "Epic EMR", "access": "Radiology", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Modality Workstation", "access": "Operator", "risk": "medium", "sessions": 1, "credentials": []},
+        ],
+    },
+    "medical_admin": {
+        "name": "Medical Administrator",
+        "department": "Administration",
+        "description": "Epic billing and registration, insurance portals, scheduling, and revenue cycle management.",
+        "accounts": [
+            {"platform": "Epic EMR", "access": "Registration/Billing", "risk": "high", "sessions": 2, "credentials": []},
+            {"platform": "Insurance Portal", "access": "Claims Processor", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Scheduling System", "access": "Scheduler", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Revenue Cycle Management", "access": "Coder", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Microsoft 365", "access": "Standard", "risk": "low", "sessions": 1, "credentials": []},
+        ],
+    },
+    "it_security": {
+        "name": "IT / Security (Healthcare)",
+        "department": "Information Technology",
+        "description": "Clinical system administration, HIPAA audit tools, network infrastructure, IAM, and security monitoring.",
+        "accounts": [
+            {"platform": "Epic EMR", "access": "Technical Admin", "risk": "critical", "sessions": 1, "credentials": ["Smart card", "RSA token"]},
+            {"platform": "HIPAA Audit System", "access": "Auditor", "risk": "critical", "sessions": 1, "credentials": []},
+            {"platform": "Network Infrastructure", "access": "Admin", "risk": "critical", "sessions": 1, "credentials": ["VPN certificate"]},
+            {"platform": "Identity Management (IAM)", "access": "Admin", "risk": "critical", "sessions": 1, "credentials": ["Service account"]},
+            {"platform": "Security Monitoring (SIEM)", "access": "Analyst", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Cloud Health Platform", "access": "Admin", "risk": "critical", "sessions": 1, "credentials": ["Access key"]},
         ],
     },
 }
 
 
 def infer_access_template(employee: Employee) -> str:
-    department = employee.department.lower()
+    dept = employee.department.lower()
     title = employee.job_title.lower()
 
-    if "design" in department or "design" in title or "brand" in title:
-        return "designer"
+    if any(kw in title for kw in ["physician", "doctor", " md", " do", "attending", "surgeon", "hospitalist"]):
+        return "physician"
+    if any(kw in dept for kw in ["pharmacy", "pharmacist"]) or "pharmacist" in title:
+        return "pharmacist"
+    if "radiology" in dept or "imaging" in dept or any(kw in title for kw in ["radiolog", "x-ray", "mri", "ct tech"]):
+        return "radiology_tech"
+    if any(kw in title for kw in ["nurse", " rn", " lpn", " np", "nursing"]):
+        return "nurse"
+    if any(kw in dept for kw in ["information technology", " it ", "security"]) or any(kw in title for kw in ["it admin", "sysadmin", "security analyst"]):
+        return "it_security"
+    if any(kw in dept for kw in ["admin", "billing", "finance", "scheduling"]) or any(kw in title for kw in ["admin", "coordinator", "scheduler", "coder"]):
+        return "medical_admin"
+    return "nurse"
 
-    if "finance" in department or "account" in title:
-        return "finance"
 
-    if "data" in department or "analyst" in title:
-        return "data_analyst"
-
-    return "software_engineer"
-
-
-def auto_provision(
-    db: Session,
-    employee: Employee,
-    github: str | None = None,
-    microsoft: str | None = None,
-    google: str | None = None,
-    template_key: str | None = None,
-):
-    selected_template = template_key or infer_access_template(employee)
-    template = ACCESS_TEMPLATES.get(selected_template)
-
+def auto_provision(db: Session, employee: Employee, template_key: str | None = None):
+    selected_key = template_key or infer_access_template(employee)
+    template = ACCESS_TEMPLATES.get(selected_key)
     if not template:
-        raise ValueError(f"Unknown access template: {selected_template}")
+        raise ValueError(f"Unknown access template: {selected_key}")
 
     local = employee.company_email.split("@")[0]
-    created_accounts = []
+    created = []
 
-    for definition in template["accounts"]:
-        platform = definition["platform"]
-
-        if platform == "GitHub":
-            identifier = github or local
-        elif platform == "Microsoft 365":
-            identifier = microsoft or employee.company_email
-        elif platform == "Google Workspace":
-            identifier = google or employee.company_email
-        elif platform in {"Slack", "VPN", "AWS"}:
-            identifier = local.replace(".", "-")
-        else:
+    for defn in template["accounts"]:
+        platform = defn["platform"]
+        if platform == "Microsoft 365":
             identifier = employee.company_email
+        elif platform in {"eRx / Surescripts", "Controlled Substance Monitor"}:
+            identifier = employee.dea_number or local
+        elif platform in {"Epic EMR", "MAR (Medication Admin)", "Pharmacy Management System",
+                          "PYXIS (Medication Dispense)", "PACS (Imaging)", "RIS (Radiology Info System)",
+                          "HIPAA Audit System", "Identity Management (IAM)"}:
+            identifier = local
+        else:
+            identifier = local.replace(".", "-")
 
         account = add_account(
-            db,
-            employee,
-            platform,
-            identifier,
-            definition["access"],
-            definition["risk"],
-            sessions=definition["sessions"],
-            credentials=definition["credentials"],
+            db, employee, platform, identifier,
+            defn["access"], defn["risk"],
+            sessions=defn["sessions"],
+            credentials=defn["credentials"],
         )
-
-        created_accounts.append(account)
-
-    if selected_template == "finance":
-        db.add(
-            CompanyAsset(
-                employee_id=employee.id,
-                asset_type="company_card",
-                provider="Ramp",
-                identifier="Ending 4812",
-                status="active",
-                metadata_json=json.dumps(
-                    {
-                        "last4": "4812",
-                        "monthly_limit": 5000,
-                        "current_balance": 0,
-                    }
-                ),
-            )
-        )
+        created.append(account)
 
     db.commit()
-    return created_accounts
+    return created
+
 
 def serialize_account(a: EmployeeAccount):
-    return {'id':a.id,'employee_id':a.employee_id,'platform':a.platform,'account_type':a.account_type,'identifier':a.identifier,'access_level':a.access_level,'status':a.status,'last_used_at':a.last_used_at,'risk_level':a.risk_level,'external_account_id':a.external_account_id,'metadata':json.loads(a.metadata_json or '{}'),'revocation_verified':a.revocation_verified,'active_sessions':sum(1 for s in a.sessions if s.active),'active_credentials':sum(1 for c in a.credentials if c.status=='active')}
+    return {
+        'id': a.id, 'employee_id': a.employee_id, 'platform': a.platform,
+        'account_type': a.account_type, 'identifier': a.identifier,
+        'access_level': a.access_level, 'status': a.status, 'last_used_at': a.last_used_at,
+        'risk_level': a.risk_level, 'external_account_id': a.external_account_id,
+        'metadata': json.loads(a.metadata_json or '{}'),
+        'revocation_verified': a.revocation_verified,
+        'active_sessions': sum(1 for s in a.sessions if s.active),
+        'active_credentials': sum(1 for c in a.credentials if c.status == 'active'),
+    }
+
 
 def employee_summary(e: Employee):
-    accounts=len(e.accounts); active=sum(1 for a in e.accounts if a.status=='active')
-    risk='High' if e.risk_score>=70 else 'Medium' if e.risk_score>=40 else 'Low'
-    return {'id':e.id,'full_name':e.full_name,'company_email':e.company_email,'department':e.department,'job_title':e.job_title,'manager_name':e.manager_name,'employment_status':e.employment_status,'accounts_count':accounts,'active_accounts':active,'risk_score':e.risk_score,'risk_level':risk}
+    accounts = len(e.accounts)
+    active = sum(1 for a in e.accounts if a.status == 'active')
+    risk = 'High' if e.risk_score >= 70 else 'Medium' if e.risk_score >= 40 else 'Low'
+    return {
+        'id': e.id, 'full_name': e.full_name, 'company_email': e.company_email,
+        'department': e.department, 'job_title': e.job_title, 'manager_name': e.manager_name,
+        'employment_status': e.employment_status, 'accounts_count': accounts,
+        'active_accounts': active, 'risk_score': e.risk_score, 'risk_level': risk,
+        # Healthcare summary fields
+        'npi_number': e.npi_number, 'license_type': e.license_type,
+        'privilege_level': e.privilege_level, 'credential_expiry': e.credential_expiry,
+    }
+
 
 def employee_detail(e: Employee):
-    sessions=sum(1 for a in e.accounts for s in a.sessions if s.active)
-    creds=sum(1 for a in e.accounts for c in a.credentials if c.status=='active')
-    groups=sum(len(json.loads(a.metadata_json or '{}').get('groups',[])) for a in e.accounts)
-    return {**employee_summary(e),'personal_email':e.personal_email,'start_date':e.start_date,'termination_date':e.termination_date,'last_access_review':e.last_access_review,'active_sessions':sessions,'active_credentials':creds,'group_memberships':groups,'owned_assets':len(e.assets),'created_at':e.created_at,'updated_at':e.updated_at}
+    sessions = sum(1 for a in e.accounts for s in a.sessions if s.active)
+    creds = sum(1 for a in e.accounts for c in a.credentials if c.status == 'active')
+    groups = sum(len(json.loads(a.metadata_json or '{}').get('groups', [])) for a in e.accounts)
+    return {
+        **employee_summary(e),
+        'personal_email': e.personal_email, 'start_date': e.start_date,
+        'termination_date': e.termination_date, 'last_access_review': e.last_access_review,
+        'active_sessions': sessions, 'active_credentials': creds,
+        'group_memberships': groups, 'owned_assets': len(e.assets),
+        'created_at': e.created_at, 'updated_at': e.updated_at,
+        # Healthcare detail fields
+        'license_number': e.license_number, 'license_state': e.license_state,
+        'dea_number': e.dea_number,
+    }
 
-def revoke_account(db: Session, a: EmployeeAccount, actor: str, reason: str, requested_action: str | None=None):
-    now=utcnow(); action=requested_action or ('freeze' if a.account_type=='company_card' or 'card' in a.platform.lower() else 'revoke')
+
+def revoke_account(db: Session, a: EmployeeAccount, actor: str, reason: str, requested_action: str | None = None):
+    now = utcnow()
+    action = requested_action or ('freeze' if a.account_type == 'company_card' or 'card' in a.platform.lower() else 'revoke')
     for s in a.sessions:
-        if s.active: s.active=False; s.revoked_at=now
+        if s.active: s.active = False; s.revoked_at = now
     for c in a.credentials:
-        if c.status=='active': c.status='revoked'; c.revoked_at=now
-    a.status='frozen' if action=='freeze' else 'cancelled' if action=='cancel' else 'revoked'
-    a.revocation_verified=True; a.updated_at=now; db.commit()
-    audit(db,a.employee_id,actor,f'{action}_account',a.platform,'verified',f'{reason}; identifier={a.identifier}')
+        if c.status == 'active': c.status = 'revoked'; c.revoked_at = now
+    a.status = 'frozen' if action == 'freeze' else 'cancelled' if action == 'cancel' else 'revoked'
+    a.revocation_verified = True; a.updated_at = now; db.commit()
+    audit(db, a.employee_id, actor, f'{action}_account', a.platform, 'verified', f'{reason}; identifier={a.identifier}')
     return serialize_account(a)
+
 
 def restore_account(db: Session, a: EmployeeAccount, actor: str, reason: str = "Accidental revocation"):
     if a.status == "active":
         return serialize_account(a)
-
     a.status = "active"
     a.revocation_verified = False
     a.updated_at = utcnow()
-
-    # Old sessions and credentials remain revoked.
-    # Restoring the account does not reactivate old tokens.
     db.commit()
-
-    audit(
-        db,
-        a.employee_id,
-        actor,
-        "restore_account",
-        a.platform,
-        "completed",
-        f"{reason}; identifier={a.identifier}; old sessions and credentials remain revoked",
-    )
-
+    audit(db, a.employee_id, actor, "restore_account", a.platform, "completed",
+          f"{reason}; identifier={a.identifier}; old sessions and credentials remain revoked")
     return serialize_account(a)
+
 
 def reactivate_employee(db: Session, e: Employee, actor: str):
     if e.employment_status == "active":
-        return {
-            "status": "already_active",
-            "employee": employee_detail(e),
-            "accounts_restored": 0,
-        }
+        return {"status": "already_active", "employee": employee_detail(e), "accounts_restored": 0}
 
     restored_count = 0
-
     for account in e.accounts:
         if account.status != "active":
-            restore_account(
-                db,
-                account,
-                actor,
-                "Employee reactivated",
-            )
+            restore_account(db, account, actor, "Clinician re-credentialed")
             restored_count += 1
 
     for asset in e.assets:
         if asset.asset_type == "company_card" and asset.status == "frozen":
             asset.status = "active"
-
         if asset.asset_type != "company_card":
             asset.assigned_to = None
 
     e.employment_status = "active"
     e.termination_date = None
     e.updated_at = utcnow()
+    db.commit(); db.refresh(e)
 
-    db.commit()
-    db.refresh(e)
-
-    audit(
-        db,
-        e.id,
-        actor,
-        "reactivate_employee",
-        e.company_email,
-        "completed",
-        f"Restored {restored_count} accounts; old sessions and credentials remain revoked",
-    )
+    audit(db, e.id, actor, "reactivate_employee", e.company_email, "completed",
+          f"Restored {restored_count} clinical system accounts; old sessions and credentials remain revoked")
 
     return {
         "status": "reactivated",
@@ -253,50 +269,144 @@ def reactivate_employee(db: Session, e: Employee, actor: str):
         "accounts_restored": restored_count,
         "sessions_restored": False,
         "credentials_restored": False,
-        "message": (
-            "Employee reactivated. Accounts were restored, but old "
-            "sessions and credentials remain revoked."
-        ),
+        "message": "Clinician re-credentialed. Accounts restored; old sessions and credentials remain revoked.",
     }
 
 
 def termination_preview(e: Employee):
-    active=[a for a in e.accounts if a.status=='active']
-    return {'employee_id':e.id,'employee':e.full_name,'accounts_discovered':len(active),'active_sessions':sum(1 for a in active for s in a.sessions if s.active),'active_credentials':sum(1 for a in active for c in a.credentials if c.status=='active'),'company_cards':sum(1 for x in e.assets if x.asset_type=='company_card' and x.status=='active'),'owned_assets':len(e.assets),'actions':[{'account_id':a.id,'platform':a.platform,'identifier':a.identifier,'planned_action':'freeze' if a.account_type=='company_card' else 'revoke'} for a in active]}
+    active = [a for a in e.accounts if a.status == 'active']
+    return {
+        'employee_id': e.id, 'employee': e.full_name,
+        'accounts_discovered': len(active),
+        'active_sessions': sum(1 for a in active for s in a.sessions if s.active),
+        'active_credentials': sum(1 for a in active for c in a.credentials if c.status == 'active'),
+        'company_cards': sum(1 for x in e.assets if x.asset_type == 'company_card' and x.status == 'active'),
+        'owned_assets': len(e.assets),
+        'actions': [{'account_id': a.id, 'platform': a.platform, 'identifier': a.identifier,
+                     'planned_action': 'freeze' if a.account_type == 'company_card' else 'revoke'} for a in active],
+    }
+
 
 def terminate(db: Session, e: Employee, actor: str, req):
-    now=utcnow(); effective=req.effective_at or now
+    now = utcnow(); effective = req.effective_at or now
     if effective > now:
-        e.employment_status='termination_scheduled'; e.termination_date=effective; db.commit(); audit(db,e.id,actor,'schedule_termination',e.company_email,'scheduled',effective.isoformat()); return {'status':'scheduled','effective_at':effective}
-    preview=termination_preview(e); revoked=verified=manual=cards=0
+        e.employment_status = 'termination_scheduled'; e.termination_date = effective; db.commit()
+        audit(db, e.id, actor, 'schedule_offboarding', e.company_email, 'scheduled', effective.isoformat())
+        return {'status': 'scheduled', 'effective_at': effective}
+
+    preview = termination_preview(e); revoked = verified = manual = cards = 0
     for a in e.accounts:
-        if a.status!='active': continue
-        revoke_account(db,a,actor,'Secure employee termination','revoke'); revoked+=1; verified+=int(a.revocation_verified)
+        if a.status != 'active': continue
+        revoke_account(db, a, actor, 'Secure clinician offboarding', 'revoke')
+        revoked += 1; verified += int(a.revocation_verified)
+
     if req.freeze_company_card:
         for asset in e.assets:
-            if asset.asset_type=='company_card' and asset.status=='active': asset.status='frozen'; cards+=1; audit(db,e.id,actor,'freeze_card',asset.identifier,'verified',asset.provider)
+            if asset.asset_type == 'company_card' and asset.status == 'active':
+                asset.status = 'frozen'; cards += 1
+                audit(db, e.id, actor, 'freeze_card', asset.identifier, 'verified', asset.provider)
+
     if req.transfer_files_to_manager and e.manager_name:
         for asset in e.assets:
-            if asset.asset_type!='company_card': asset.assigned_to=e.manager_name
-    e.employment_status='terminated'; e.termination_date=effective; e.updated_at=now
-    summary={'accounts_discovered':preview['accounts_discovered'],'accounts_revoked':revoked,'accounts_verified':verified,'requires_manual_action':manual,'sessions_terminated':preview['active_sessions'],'tokens_revoked':preview['active_credentials'],'company_cards_frozen':cards,'files_transferred':143 if req.transfer_files_to_manager else 0,'hidden_access_discovered':sum(1 for a in e.accounts for c in a.credentials if c.credential_type=='Personal access token')}
-    run=TerminationRun(employee_id=e.id,actor=actor,effective_at=effective,status='completed',summary_json=json.dumps(summary)); db.add(run); db.commit(); audit(db,e.id,actor,'terminate_employee',e.company_email,'completed',json.dumps(summary)); return {'termination_id':run.id,'status':'completed','effective_at':effective,'summary':summary}
+            if asset.asset_type != 'company_card': asset.assigned_to = e.manager_name
+
+    e.employment_status = 'terminated'; e.termination_date = effective; e.updated_at = now
+    summary = {
+        'accounts_discovered': preview['accounts_discovered'],
+        'accounts_revoked': revoked,
+        'accounts_verified': verified,
+        'requires_manual_action': manual,
+        'sessions_terminated': preview['active_sessions'],
+        'tokens_revoked': preview['active_credentials'],
+        'company_cards_frozen': cards,
+        'files_transferred': 143 if req.transfer_files_to_manager else 0,
+        'hidden_access_discovered': sum(1 for a in e.accounts for c in a.credentials if c.credential_type in {'DEA certificate', 'Smart card', 'RSA token'}),
+    }
+    run = TerminationRun(employee_id=e.id, actor=actor, effective_at=effective, status='completed', summary_json=json.dumps(summary))
+    db.add(run); db.commit()
+    audit(db, e.id, actor, 'offboard_clinician', e.company_email, 'completed', json.dumps(summary))
+    return {'termination_id': run.id, 'status': 'completed', 'effective_at': effective, 'summary': summary}
+
 
 def reset_demo(db: Session):
-    for model in [TerminationRun,AuditEvent,Credential,AccountSession,CompanyAsset,EmployeeAccount,Employee]: db.query(model).delete()
+    for model in [TerminationRun, AuditEvent, Credential, AccountSession, CompanyAsset, EmployeeAccount, Employee]:
+        db.query(model).delete()
     db.commit()
-    sarah=Employee(full_name='Sarah Chen',company_email='sarah.chen@company.com',personal_email='sarah.personal@example.com',department='Engineering',job_title='Software Engineer',manager_name='Alex Morgan',employment_status='active',start_date=datetime(2024,3,4).date(),risk_score=92,last_access_review=utcnow()-timedelta(days=89)); db.add(sarah); db.flush()
-    add_account(db,sarah,'Google Workspace',sarah.company_email,'Standard','medium',sessions=2,credentials=['OAuth grant'])
-    add_account(db,sarah,'Microsoft 365','schen@company.com','Standard','medium',sessions=1)
-    add_account(db,sarah,'Slack','sarah.chen','Member','medium',sessions=3)
-    add_account(db,sarah,'GitHub','sarahc-dev','Org Owner','critical',sessions=1,credentials=['Personal access token'])
-    add_account(db,sarah,'AWS','sarah-chen','Production Admin','critical',sessions=2,credentials=['Access key','SSH key'])
-    add_account(db,sarah,'VPN','sarah.chen','Engineering','high',sessions=1,credentials=['VPN certificate'])
-    add_account(db,sarah,'Jira',sarah.company_email,'Developer','low',sessions=1)
-    add_account(db,sarah,'Salesforce','schen','User','medium',sessions=1)
-    db.add(CompanyAsset(employee_id=sarah.id,asset_type='company_card',provider='Ramp',identifier='Ending 4921',status='active',metadata_json=json.dumps({'last4':'4921','monthly_limit':5000,'current_balance':812.44})))
-    db.add(CompanyAsset(employee_id=sarah.id,asset_type='laptop',provider='Apple',identifier='MacBook Pro GK-102',status='assigned',metadata_json='{}'))
-    alex=Employee(full_name='Alex Smith',company_email='alex.smith@company.com',department='Finance',job_title='Analyst',manager_name='Jordan Lee',employment_status='active',start_date=datetime(2025,1,15).date(),risk_score=55,last_access_review=utcnow()-timedelta(days=25)); db.add(alex); db.flush(); auto_provision(db,alex,microsoft='asmith@company.com')
-    maya=Employee(full_name='Maya Patel',company_email='maya.patel@company.com',department='HR',job_title='Manager',manager_name='Jordan Lee',employment_status='active',start_date=datetime(2023,8,1).date(),risk_score=28,last_access_review=utcnow()-timedelta(days=12)); db.add(maya); db.flush(); auto_provision(db,maya)
+
+    # Dr. Sarah Chen — Attending Physician (critical access, high HIPAA risk)
+    sarah = Employee(
+        full_name='Dr. Sarah Chen',
+        company_email='sarah.chen@cityhealth.org',
+        personal_email='sarah.personal@example.com',
+        department='Clinical Medicine',
+        job_title='Attending Physician',
+        manager_name='Dr. Michael Roberts',
+        employment_status='active',
+        start_date=datetime(2022, 3, 4).date(),
+        risk_score=92,
+        last_access_review=utcnow() - timedelta(days=89),
+        npi_number='1234567890',
+        license_number='MD-CA-12345',
+        license_state='CA',
+        license_type='MD',
+        dea_number='BC1234563',
+        privilege_level='full',
+        credential_expiry=datetime(2026, 6, 30).date(),
+    )
+    db.add(sarah); db.flush()
+    add_account(db, sarah, 'Epic EMR', 'sarah.chen', 'Attending Physician', 'critical', sessions=2, credentials=['Smart card', 'RSA token'])
+    add_account(db, sarah, 'PACS (Imaging)', 'schen@cityhealth.org', 'Radiologist View', 'high', sessions=1)
+    add_account(db, sarah, 'eRx / Surescripts', 'BC1234563', 'Prescriber', 'critical', sessions=1, credentials=['DEA certificate'])
+    add_account(db, sarah, 'Care Coordination Portal', 'sarah.chen', 'Attending', 'high', sessions=1)
+    add_account(db, sarah, 'Telemedicine Platform', 'sarah.chen@cityhealth.org', 'Provider', 'medium', sessions=1)
+    add_account(db, sarah, 'Clinical Decision Support', 'sarah.chen', 'Standard', 'low', sessions=1)
+    db.add(CompanyAsset(
+        employee_id=sarah.id, asset_type='mobile_device', provider='Apple',
+        identifier='iPhone GK-MED-019', status='assigned', metadata_json='{}',
+    ))
+
+    # James Torres — Registered Nurse (medium HIPAA risk)
+    james = Employee(
+        full_name='James Torres',
+        company_email='james.torres@cityhealth.org',
+        department='Clinical Nursing',
+        job_title='Registered Nurse',
+        manager_name='Charge Nurse Patricia Kim',
+        employment_status='active',
+        start_date=datetime(2024, 6, 15).date(),
+        risk_score=52,
+        last_access_review=utcnow() - timedelta(days=25),
+        npi_number='9876543210',
+        license_number='RN-CA-78901',
+        license_state='CA',
+        license_type='RN',
+        privilege_level='standard',
+        credential_expiry=datetime(2027, 1, 31).date(),
+    )
+    db.add(james); db.flush()
+    auto_provision(db, james, template_key='nurse')
+
+    # Dr. Fatima Al-Rashid — Staff Pharmacist (medium-high risk, DEA access)
+    fatima = Employee(
+        full_name='Dr. Fatima Al-Rashid',
+        company_email='fatima.alrashid@cityhealth.org',
+        department='Pharmacy',
+        job_title='Staff Pharmacist',
+        manager_name='Chief Pharmacist Dr. Chen',
+        employment_status='active',
+        start_date=datetime(2023, 9, 1).date(),
+        risk_score=68,
+        last_access_review=utcnow() - timedelta(days=14),
+        license_number='PharmD-CA-55123',
+        license_state='CA',
+        license_type='PharmD',
+        dea_number='FA9876541',
+        privilege_level='full',
+        credential_expiry=datetime(2025, 12, 31).date(),
+    )
+    db.add(fatima); db.flush()
+    auto_provision(db, fatima, template_key='pharmacist')
+
     db.commit()
-    audit(db,None,'system','reset_demo','company','completed','Created three synthetic employees')
+    audit(db, None, 'system', 'reset_demo', 'cityhealth.org', 'completed',
+          'Created three synthetic healthcare staff members')

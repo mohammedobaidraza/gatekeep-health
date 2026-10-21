@@ -39,7 +39,6 @@ function byRisk(a: EmployeeAccount, b: EmployeeAccount) {
   const rank =
     RISK_ORDER.indexOf(a.risk_level.toLowerCase()) -
     RISK_ORDER.indexOf(b.risk_level.toLowerCase());
-
   return rank !== 0 ? rank : a.platform.localeCompare(b.platform);
 }
 
@@ -58,23 +57,15 @@ export default function EmployeePage() {
 
   const load = useCallback(async () => {
     const token = localStorage.getItem("gatekeep_token");
+    if (!token) { window.location.href = "/login"; return; }
 
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    const [
-      employeeResponse,
-      accountsResponse,
-      assetsResponse,
-      eventsResponse,
-    ] = await Promise.all([
-      getEmployee(token, employeeId),
-      getEmployeeAccounts(token, employeeId),
-      getAssets(token, employeeId),
-      getAuditEvents(token, employeeId),
-    ]);
+    const [employeeResponse, accountsResponse, assetsResponse, eventsResponse] =
+      await Promise.all([
+        getEmployee(token, employeeId),
+        getEmployeeAccounts(token, employeeId),
+        getAssets(token, employeeId),
+        getAuditEvents(token, employeeId),
+      ]);
 
     setEmployee(employeeResponse);
     setAccounts([...accountsResponse].sort(byRisk));
@@ -84,43 +75,33 @@ export default function EmployeePage() {
 
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       try {
         await load();
       } catch {
-        if (!cancelled) setMessage("Failed to load employee");
+        if (!cancelled) setMessage("Failed to load clinician");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [load]);
 
   async function handleRevoke(accountId: number) {
     const token = localStorage.getItem("gatekeep_token");
     if (!token) return;
-
     setBusyAccount(accountId);
-
     try {
       await revokeAccount(token, accountId);
       const verification = await verifyAccount(token, accountId);
-
       setMessage(
         verification.verified
           ? "Access revoked and verified closed."
           : "Access changed, but verification did not pass."
       );
-
       await load();
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Failed to revoke access"
-      );
+      setMessage(error instanceof Error ? error.message : "Failed to revoke access");
     } finally {
       setBusyAccount(null);
     }
@@ -129,17 +110,13 @@ export default function EmployeePage() {
   async function handleRestore(accountId: number) {
     const token = localStorage.getItem("gatekeep_token");
     if (!token) return;
-
     setBusyAccount(accountId);
-
     try {
       const result = await restoreAccount(token, accountId);
       setMessage(result.message);
       await load();
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Failed to restore access"
-      );
+      setMessage(error instanceof Error ? error.message : "Failed to restore access");
     } finally {
       setBusyAccount(null);
     }
@@ -148,17 +125,13 @@ export default function EmployeePage() {
   async function handleReactivate() {
     const token = localStorage.getItem("gatekeep_token");
     if (!token) return;
-
     setReactivating(true);
-
     try {
       const result = await reactivateEmployee(token, employeeId);
       setMessage(result.message);
       await load();
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Failed to reactivate employee"
-      );
+      setMessage(error instanceof Error ? error.message : "Failed to restore credentials");
     } finally {
       setReactivating(false);
     }
@@ -167,7 +140,7 @@ export default function EmployeePage() {
   if (loading) {
     return (
       <Shell>
-        <Caption>Loading employee…</Caption>
+        <Caption>Loading clinician…</Caption>
       </Shell>
     );
   }
@@ -175,7 +148,7 @@ export default function EmployeePage() {
   if (!employee) {
     return (
       <Shell>
-        <PanelTitle>Employee not found</PanelTitle>
+        <PanelTitle>Clinician not found</PanelTitle>
         <Caption className="mt-2">{message}</Caption>
       </Shell>
     );
@@ -197,7 +170,7 @@ export default function EmployeePage() {
     >
       <PageHeader
         title={employee.full_name}
-        subtitle={`${employee.department} · ${employee.job_title} · Manager: ${employee.manager_name || "Not assigned"}`}
+        subtitle={`${employee.department} · ${employee.job_title} · Supervisor: ${employee.manager_name || "Not assigned"}`}
         actions={
           terminated ? (
             <>
@@ -206,14 +179,14 @@ export default function EmployeePage() {
                 disabled={reactivating}
                 onClick={handleReactivate}
               >
-                {reactivating ? "Reactivating" : "Reactivate"}
+                {reactivating ? "Restoring credentials" : "Restore credentials"}
               </Button>
 
               <Link
                 href={`/employees/${employeeId}/report`}
                 className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
               >
-                View report
+                View offboard report
                 <ArrowRight size={12} strokeWidth={2} />
               </Link>
             </>
@@ -222,7 +195,7 @@ export default function EmployeePage() {
               href={`/employees/${employeeId}/offboard`}
               className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
             >
-              Offboard employee
+              Offboard clinician
               <ArrowRight size={12} strokeWidth={2} />
             </Link>
           )
@@ -230,40 +203,30 @@ export default function EmployeePage() {
       />
 
       {message ? (
-        <Caption className="mt-6 bg-surface p-inset text-ink">
-          {message}
-        </Caption>
+        <Caption className="mt-6 bg-surface p-inset text-ink">{message}</Caption>
       ) : null}
 
       <div className="mt-8 grid gap-px bg-hairline sm:grid-cols-2 lg:grid-cols-4">
         <Stat
-          label="Risk score"
+          label="HIPAA risk score"
           value={employee.risk_score}
           hint={`${employee.risk_level} · out of 100`}
           emphasis={scoreLevel(employee.risk_score) === 4}
         />
-        <Stat label="Active accounts" value={employee.active_accounts} />
+        <Stat label="Active system access" value={employee.active_accounts} />
         <Stat label="Active sessions" value={employee.active_sessions} />
         <Stat label="Active credentials" value={employee.active_credentials} />
       </div>
 
+      {/* Clinician information */}
       <section className="mt-10 bg-surface p-inset">
-        <PanelTitle>Employee information</PanelTitle>
+        <PanelTitle>Clinician information</PanelTitle>
 
         <div className="mt-6 grid gap-6 md:grid-cols-3">
           <Info label="Company email" value={employee.company_email} />
-          <Info
-            label="Personal email"
-            value={employee.personal_email || "Not provided"}
-          />
-          <Info
-            label="Employment status"
-            value={employee.employment_status.replace("_", " ")}
-          />
-          <Info
-            label="Start date"
-            value={employee.start_date || "Not provided"}
-          />
+          <Info label="Personal email" value={employee.personal_email || "Not provided"} />
+          <Info label="Credential status" value={employee.employment_status.replace("_", " ")} />
+          <Info label="Start date" value={employee.start_date || "Not provided"} />
           <Info label="Owned assets" value={String(employee.owned_assets)} />
           <Info
             label="Last access review"
@@ -274,14 +237,46 @@ export default function EmployeePage() {
             }
           />
         </div>
+
+        {/* Healthcare credential info */}
+        {(employee.npi_number || employee.license_number || employee.dea_number) ? (
+          <>
+            <div className="mt-6 border-t border-hairline pt-6">
+              <span className="block font-ui text-ui text-ink-tertiary">Licensure</span>
+            </div>
+            <div className="mt-4 grid gap-6 md:grid-cols-3">
+              {employee.npi_number ? (
+                <Info label="NPI number" value={employee.npi_number} />
+              ) : null}
+              {employee.license_type ? (
+                <Info label="License type" value={employee.license_type} />
+              ) : null}
+              {employee.license_number ? (
+                <Info
+                  label="License"
+                  value={`${employee.license_number}${employee.license_state ? ` (${employee.license_state})` : ""}`}
+                />
+              ) : null}
+              {employee.dea_number ? (
+                <Info label="DEA number" value={employee.dea_number} />
+              ) : null}
+              {employee.privilege_level ? (
+                <Info label="Privilege level" value={employee.privilege_level} />
+              ) : null}
+              {employee.credential_expiry ? (
+                <Info label="Credential expiry" value={employee.credential_expiry} />
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </section>
 
+      {/* Clinical system access */}
       <section className="mt-10">
-        <PanelTitle>Connected accounts</PanelTitle>
+        <PanelTitle>Clinical system access</PanelTitle>
 
         <Caption className="mt-2 text-ink-tertiary">
-          Sorted by risk. Revoke individually, or offboard to close every path
-          at once.
+          Sorted by risk. Revoke individually, or offboard to close every access path at once.
         </Caption>
 
         <div className="mt-4">
@@ -289,9 +284,9 @@ export default function EmployeePage() {
             minWidth={980}
             head={
               <>
-                <Th>Platform</Th>
+                <Th>System</Th>
                 <Th>Identifier</Th>
-                <Th>Access</Th>
+                <Th>Access level</Th>
                 <Th>Risk</Th>
                 <Th>Sessions</Th>
                 <Th>Credentials</Th>
@@ -302,49 +297,30 @@ export default function EmployeePage() {
           >
             {accounts.map((account) => {
               const isActive = account.status === "active";
-
               return (
                 <Tr key={account.id}>
                   <Td>
-                    <span className="font-display text-[16px] text-ink">
-                      {account.platform}
-                    </span>
+                    <span className="font-display text-[16px] text-ink">{account.platform}</span>
                   </Td>
-
                   <Td className="text-ink-tertiary">{account.identifier}</Td>
-
-                  <Td className="text-ink-secondary">
-                    {account.access_level}
-                  </Td>
-
+                  <Td className="text-ink-secondary">{account.access_level}</Td>
                   <Td>
-                    <Badge level={riskLevel(account.risk_level)}>
-                      {account.risk_level}
-                    </Badge>
+                    <Badge level={riskLevel(account.risk_level)}>{account.risk_level}</Badge>
                   </Td>
-
                   <Td>{account.active_sessions}</Td>
-
                   <Td>{account.active_credentials}</Td>
-
                   <Td>
                     <div className="flex items-center gap-3">
-                      <Badge level={statusLevel(account.status)}>
-                        {account.status}
-                      </Badge>
-
+                      <Badge level={statusLevel(account.status)}>{account.status}</Badge>
                       {account.revocation_verified ? <Verified /> : null}
                     </div>
                   </Td>
-
                   <Td>
                     <Button
                       variant="bare"
                       disabled={busyAccount === account.id}
                       onClick={() =>
-                        isActive
-                          ? handleRevoke(account.id)
-                          : handleRestore(account.id)
+                        isActive ? handleRevoke(account.id) : handleRestore(account.id)
                       }
                       className="h-auto px-0"
                     >
@@ -363,11 +339,7 @@ export default function EmployeePage() {
       </section>
 
       <div className="mt-10">
-        <AssetsPanel
-          assets={assets}
-          managerName={employee.manager_name}
-          onChange={load}
-        />
+        <AssetsPanel assets={assets} managerName={employee.manager_name} onChange={load} />
       </div>
 
       <div className="mt-10">
