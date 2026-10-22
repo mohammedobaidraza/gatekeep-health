@@ -17,6 +17,7 @@ import { PageHeader, Shell } from "@/components/ui/Shell";
 import { Stat } from "@/components/ui/Stat";
 import { Table, Td, Th, Tr } from "@/components/ui/Table";
 import {
+  auditExportUrl,
   getAssets,
   getAuditEvents,
   getEmployee,
@@ -344,6 +345,30 @@ export default function EmployeePage() {
 
       <div className="mt-10">
         <ActivityLog events={events} />
+        <div className="mt-4">
+          <a
+            href={`${auditExportUrl(employeeId)}?token=${localStorage.getItem("gatekeep_token") ?? ""}`}
+            download
+            className="font-ui text-ui text-ink-tertiary underline decoration-hairline underline-offset-4 transition-colors hover:text-ink"
+            onClick={(e) => {
+              // Use Authorization header approach via fetch for proper auth
+              e.preventDefault();
+              const token = localStorage.getItem("gatekeep_token");
+              fetch(auditExportUrl(employeeId), { headers: { Authorization: `Bearer ${token}` } })
+                .then((r) => r.blob())
+                .then((blob) => {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `audit-${employeeId}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                });
+            }}
+          >
+            Export audit log (CSV)
+          </a>
+        </div>
       </div>
     </Shell>
   );

@@ -29,10 +29,16 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<TabKey>("active");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [role, setRole] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("gatekeep_token");
     if (!token) { window.location.href = "/login"; return; }
+    const user = localStorage.getItem("gatekeep_user");
+    if (user) {
+      try { setRole(JSON.parse(user).role ?? ""); } catch { /* ignore */ }
+    }
 
     getEmployees(token)
       .then(setStaff)
@@ -52,7 +58,15 @@ export default function DashboardPage() {
 
   const active = staff.filter((s) => s.employment_status !== "terminated");
   const past = staff.filter((s) => s.employment_status === "terminated");
-  const visible = tab === "active" ? active : past;
+  const pool = tab === "active" ? active : past;
+  const visible = search.trim()
+    ? pool.filter((s) =>
+        [s.full_name, s.company_email, s.job_title, s.department]
+          .join(" ")
+          .toLowerCase()
+          .includes(search.toLowerCase())
+      )
+    : pool;
 
   const activeAccounts = active.reduce((t, s) => t + s.active_accounts, 0);
   const highRisk = active.filter((s) => s.risk_level === "High").length;
@@ -70,6 +84,15 @@ export default function DashboardPage() {
         subtitle="Manage clinician identities, system access, and secure offboarding."
         actions={
           <>
+            {role === "system_admin" && (
+              <Link
+                href="/users"
+                className="flex h-control items-center gap-2 border border-hairline px-inset font-ui text-ui text-ink transition-colors hover:border-hairline-strong"
+              >
+                Users
+              </Link>
+            )}
+
             <Link
               href="/employees/new"
               className="flex h-control items-center gap-2 border border-hairline px-inset font-ui text-ui text-ink transition-colors hover:border-hairline-strong"
@@ -110,7 +133,17 @@ export default function DashboardPage() {
 
       {!error ? (
         <>
-          <div className="mt-10">
+          <div className="mt-10 flex flex-wrap items-center gap-4">
+            <input
+              type="search"
+              placeholder="Search by name, email, role…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-control flex-1 border border-hairline bg-surface px-inset font-ui text-ui text-ink placeholder:text-ink-tertiary outline-none focus:border-ink min-w-48"
+            />
+          </div>
+
+          <div className="mt-4">
             <Tabs
               label="Staff categories"
               value={tab}

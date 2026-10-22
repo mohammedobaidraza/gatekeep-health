@@ -1,3 +1,5 @@
+from contextvars import ContextVar
+from typing import Callable
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -13,6 +15,12 @@ from app.agent.schemas import (
     UnknownPlan,
 )
 from app.models import Employee, EmployeeAccount
+
+# Set this context var before running run_agent in a thread to receive
+# each step as it is emitted (used by the SSE streaming endpoint).
+step_emitter: ContextVar[Callable[[AgentStepResult], None] | None] = ContextVar(
+    "step_emitter", default=None
+)
 from app.schemas import TerminationRequest
 from app.services import (
     add_account,
@@ -30,13 +38,20 @@ def make_step(
     message: str,
     evidence: dict | None = None,
 ) -> AgentStepResult:
-    return AgentStepResult(
+    step = AgentStepResult(
         sequence=sequence,
         stage=stage,
         status=status,
         message=message,
         evidence=evidence or {},
     )
+    emitter = step_emitter.get()
+    if emitter is not None:
+        try:
+            emitter(step)
+        except Exception:
+            pass
+    return step
 
 
 def build_onboarding_plan(

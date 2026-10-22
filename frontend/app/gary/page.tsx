@@ -7,7 +7,7 @@ import { Verified } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Caption, PanelTitle } from "@/components/ui/Panel";
 import { PageHeader, Shell } from "@/components/ui/Shell";
-import { GaryAgentResult, GaryAgentStep, runGaryAgent } from "@/lib/api";
+import { GaryAgentResult, GaryAgentStep, streamGraceAgent } from "@/lib/api";
 
 const EXAMPLES = [
   {
@@ -52,6 +52,7 @@ function titleCase(key: string) {
 export default function GracePage() {
   const [instruction, setInstruction] = useState("");
   const [result, setResult] = useState<GaryAgentResult | null>(null);
+  const [liveSteps, setLiveSteps] = useState<GaryAgentStep[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
 
@@ -71,19 +72,29 @@ export default function GracePage() {
     setRunning(true);
     setError("");
     setResult(null);
+    setLiveSteps([]);
 
     try {
-      setResult(await runGaryAgent(token, cleaned, true));
+      for await (const event of streamGraceAgent(token, cleaned, true)) {
+        if (event.type === "step") {
+          setLiveSteps((prev) => {
+            const next = prev.filter((s) => s.sequence !== event.step.sequence);
+            return [...next, event.step].sort((a, b) => a.sequence - b.sequence);
+          });
+        } else if (event.type === "done") {
+          setResult(event.result);
+        } else if (event.type === "error") {
+          setError(event.message);
+        }
+      }
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Grace could not complete the request."
-      );
+      setError(cause instanceof Error ? cause.message : "Grace could not complete the request.");
     } finally {
       setRunning(false);
     }
   }
 
-  const steps = result?.steps ?? [];
+  const steps = result?.steps ?? liveSteps;
 
   return (
     <Shell

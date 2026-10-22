@@ -329,8 +329,22 @@ def terminate(db: Session, e: Employee, actor: str, req):
 
 
 def reset_demo(db: Session):
-    for model in [TerminationRun, AuditEvent, Credential, AccountSession, CompanyAsset, EmployeeAccount, Employee]:
+    from app.models import User
+    from app.security import hash_password
+    from app.config import settings
+
+    for model in [TerminationRun, AuditEvent, Credential, AccountSession, CompanyAsset, EmployeeAccount, Employee, User]:
         db.query(model).delete()
+    db.commit()
+
+    # Seed the four demo system users with real bcrypt hashes
+    for u in [
+        {"email": settings.demo_admin_email,      "name": "System Administrator", "password": settings.demo_admin_password,      "role": "system_admin"},
+        {"email": settings.demo_head_email,        "name": "Department Head",      "password": settings.demo_head_password,        "role": "department_head"},
+        {"email": settings.demo_coordinator_email, "name": "Staff Coordinator",    "password": settings.demo_coordinator_password, "role": "staff_coordinator"},
+        {"email": settings.demo_compliance_email,  "name": "Compliance Officer",   "password": settings.demo_compliance_password,  "role": "compliance_officer"},
+    ]:
+        db.add(User(email=u["email"], name=u["name"], hashed_password=hash_password(u["password"]), role=u["role"], is_active=True))
     db.commit()
 
     # Dr. Sarah Chen — Attending Physician (critical access, high HIPAA risk)

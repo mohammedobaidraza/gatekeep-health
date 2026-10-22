@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -88,3 +89,40 @@ class TerminationRequest(BaseModel):
     notify_medical_staff_office: bool = True
     revoke_dea_system_access: bool = True
     revoke_prescribing_access: bool = True
+
+
+# ── System User Management ──────────────────────────────────────────────────────
+
+UserRoleLiteral = Literal[
+    "system_admin", "department_head", "staff_coordinator", "compliance_officer"
+]
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    name: str = Field(min_length=2, max_length=100)
+    password: str = Field(min_length=8)
+    role: UserRoleLiteral
+
+
+class UserPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    role: UserRoleLiteral | None = None
+    is_active: bool | None = None
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    name: str
+    role: str
+    is_active: bool
+    must_change_password: bool
+    created_at: datetime
+    last_login_at: datetime | None
+    created_by: str | None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)

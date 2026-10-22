@@ -115,8 +115,16 @@ export async function login(email: string, password: string) {
 
 // ── Staff (Employees) ──────────────────────────────────────────────────────────
 
-export async function getEmployees(token: string) {
-  return apiRequest<EmployeeSummary[]>("/api/v1/employees", {
+export async function getEmployees(
+  token: string,
+  params: { q?: string; department?: string; status?: string } = {}
+) {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.department) qs.set("department", params.department);
+  if (params.status) qs.set("status", params.status);
+  const query = qs.toString() ? `?${qs}` : "";
+  return apiRequest<EmployeeSummary[]>(`/api/v1/employees${query}`, {
     headers: authHeaders(token),
     cache: "no-store",
   });
@@ -357,6 +365,73 @@ export async function getAuditEvents(token: string, employeeId: string) {
   );
 }
 
+export function auditExportUrl(employeeId: string) {
+  return `${API_URL}/api/v1/employees/${employeeId}/audit-events/export`;
+}
+
+// ── System User Management ──────────────────────────────────────────────────────
+
+export type SystemUser = {
+  id: number;
+  email: string;
+  name: string;
+  role: UserRole;
+  is_active: boolean;
+  must_change_password: boolean;
+  created_at: string;
+  last_login_at: string | null;
+  created_by: string | null;
+};
+
+export async function getUsers(token: string) {
+  return apiRequest<SystemUser[]>("/api/v1/users", {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+}
+
+export async function createUser(
+  token: string,
+  input: { email: string; name: string; password: string; role: UserRole }
+) {
+  return apiRequest<SystemUser>("/api/v1/users", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateUser(
+  token: string,
+  userId: number,
+  patch: { name?: string; role?: UserRole; is_active?: boolean }
+) {
+  return apiRequest<SystemUser>(`/api/v1/users/${userId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function resetUserPassword(token: string, userId: number) {
+  return apiRequest<{ status: string; temp_password: string }>(
+    `/api/v1/users/${userId}/reset-password`,
+    { method: "POST", headers: authHeaders(token) }
+  );
+}
+
+export async function changePassword(
+  token: string,
+  currentPassword: string,
+  newPassword: string
+) {
+  return apiRequest<{ status: string }>("/api/v1/auth/change-password", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
 // ── Access Templates ───────────────────────────────────────────────────────────
 
 export type AccessTemplate = {
@@ -412,4 +487,51 @@ export async function runGaryAgent(
     headers: authHeaders(token),
     body: JSON.stringify({ instruction, auto_execute: autoExecute }),
   });
+}
+
+// ── Grace streaming (SSE via fetch ReadableStream) ─────────────────────────────
+
+export type GraceStreamEvent =
+  | { type: "step"; step: GaryAgentStep }
+  | { type: "done"; result: GaryAgentResult }
+  | { type: "error"; message: string };
+
+export async function* streamGraceAgent(
+  token: string,
+  instruction: string,
+  autoExecute = true
+): AsyncGenerator<GraceStreamEvent> {
+  const response = await fetch(`${API_URL}/api/v1/agent/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ instruction, auto_execute: autoExecute }),
+  });
+  if (!response.ok) {
+    throw new Error(`Grace stream failed: ${response.status}`);
+  }
+  if (!response.body) throw new Error("No response body");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const raw = line.slice(6).trim();
+        if (raw) {
+          try {
+            yield JSON.parse(raw) as GraceStreamEvent;
+          } catch {
+            // malformed chunk — skip
+          }
+        }
+      }
+    }
+  }
 }
