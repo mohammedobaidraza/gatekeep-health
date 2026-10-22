@@ -11,12 +11,20 @@ import { GaryAgentResult, GaryAgentStep, streamGraceAgent } from "@/lib/api";
 
 const EXAMPLES = [
   {
-    label: "Credentialing",
+    label: "Credential a physician",
     text: "Add Dr. Layla Hassan as an attending physician. Her email is layla.hassan@cityhealth.org. Her supervisor is Dr. Michael Roberts.",
   },
   {
-    label: "Offboarding",
+    label: "Credential a nurse",
+    text: "Onboard Sarah Kim as a registered nurse in the ICU. Her email is sarah.kim@cityhealth.org and her license number is RN-CA-44201.",
+  },
+  {
+    label: "Offboard immediately",
     text: "Offboard Nurse James Torres immediately. Revoke all clinical system access, preserve patient records per HIPAA, and notify the department head.",
+  },
+  {
+    label: "Scheduled offboarding",
+    text: "Schedule the offboarding of Dr. Fatima Al-Rashid for her last day, December 31. Preserve all patient records and transfer files to her supervisor.",
   },
 ];
 
@@ -150,7 +158,7 @@ export default function GracePage() {
         </div>
       </div>
 
-      {running || result ? (
+      {(running || result) && (running || result?.intent !== "unknown") ? (
         <section className="mt-10">
           <PanelTitle>{running ? "Working" : "Execution timeline"}</PanelTitle>
 
@@ -174,54 +182,58 @@ export default function GracePage() {
       ) : null}
 
       {result ? (
-        <>
-          <section className="mt-10">
-            <PanelTitle>{result.message}</PanelTitle>
-
-            <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-4">
-              <Figure label="Intent" value={INTENT_LABELS[result.intent]} />
-              <Figure label="Status" value={result.status.replace("_", " ")} />
-              <Figure label="Confidence" value={`${Math.round(result.confidence * 100)}%`} />
-              <Figure label="Run" value={result.run_id.slice(0, 8)} />
-            </div>
-
-            <Caption className="mt-4 text-ink-tertiary">
-              {result.employee_name
-                ? `Clinician: ${result.employee_name}`
-                : "No clinician could be resolved from that instruction."}
-            </Caption>
-          </section>
-
-          {Object.keys(result.summary).length > 0 ? (
+        result.intent === "unknown" ? (
+          <UnknownResult onUse={(text) => setInstruction(text)} />
+        ) : (
+          <>
             <section className="mt-10">
-              <PanelTitle>Proof of work</PanelTitle>
-              <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-3">
-                {Object.entries(result.summary).map(([key, value]) => (
-                  <Figure key={key} label={titleCase(key)} value={String(value)} />
-                ))}
-              </div>
-            </section>
-          ) : null}
+              <PanelTitle>{result.message}</PanelTitle>
 
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            {result.employee_id ? (
-              <Link
-                href={`/employees/${result.employee_id}`}
-                className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
-              >
-                View clinician
-                <ArrowRight size={12} strokeWidth={2} />
-              </Link>
+              <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-4">
+                <Figure label="Intent" value={INTENT_LABELS[result.intent]} />
+                <Figure label="Status" value={result.status.replace("_", " ")} />
+                <Figure label="Confidence" value={`${Math.round(result.confidence * 100)}%`} />
+                <Figure label="Run" value={result.run_id.slice(0, 8)} />
+              </div>
+
+              {result.employee_name ? (
+                <Caption className="mt-4 text-ink-tertiary">
+                  Clinician: {result.employee_name}
+                </Caption>
+              ) : null}
+            </section>
+
+            {Object.keys(result.summary).length > 0 ? (
+              <section className="mt-10">
+                <PanelTitle>Proof of work</PanelTitle>
+                <div className="mt-4 grid gap-px bg-hairline sm:grid-cols-3">
+                  {Object.entries(result.summary).map(([key, value]) => (
+                    <Figure key={key} label={titleCase(key)} value={String(value)} />
+                  ))}
+                </div>
+              </section>
             ) : null}
 
-            <Link
-              href="/dashboard"
-              className="font-ui text-ui text-ink-secondary transition-colors hover:text-ink"
-            >
-              Back to directory
-            </Link>
-          </div>
-        </>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              {result.employee_id ? (
+                <Link
+                  href={`/employees/${result.employee_id}`}
+                  className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
+                >
+                  View clinician
+                  <ArrowRight size={12} strokeWidth={2} />
+                </Link>
+              ) : null}
+
+              <Link
+                href="/dashboard"
+                className="font-ui text-ui text-ink-secondary transition-colors hover:text-ink"
+              >
+                Back to directory
+              </Link>
+            </div>
+          </>
+        )
       ) : null}
     </Shell>
   );
@@ -270,5 +282,65 @@ function Figure({ label, value }: { label: string; value: string }) {
       <span className="font-ui text-ui text-ink-tertiary">{label}</span>
       <span className="font-display text-[24px] leading-none break-words">{value}</span>
     </div>
+  );
+}
+
+const CAPABILITIES = [
+  {
+    heading: "Credential a clinician",
+    examples: [
+      "Add Dr. Layla Hassan as an attending physician. Her email is layla.hassan@cityhealth.org.",
+      "Onboard Sarah Kim as a registered nurse. License RN-CA-44201. Supervisor is Charge Nurse Patricia Kim.",
+      "Add a new pharmacist — Dr. Omar Farouk, email omar.farouk@cityhealth.org, DEA number BF1234567.",
+    ],
+  },
+  {
+    heading: "Offboard a clinician",
+    examples: [
+      "Offboard Nurse James Torres immediately. Revoke all clinical system access and preserve patient records per HIPAA.",
+      "Schedule the offboarding of Dr. Sarah Chen for December 31. Transfer files to Dr. Roberts.",
+      "Terminate Dr. Fatima Al-Rashid's access today. Revoke DEA system access and notify the medical staff office.",
+    ],
+  },
+];
+
+function UnknownResult({ onUse }: { onUse: (text: string) => void }) {
+  return (
+    <section className="mt-10">
+      <PanelTitle>Grace handles two things</PanelTitle>
+      <Caption className="mt-2 text-ink-tertiary">
+        Describe the action in plain language — Grace works out the details, executes it, and verifies the result. Here are some examples to get started.
+      </Caption>
+
+      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+        {CAPABILITIES.map((cap) => (
+          <div key={cap.heading} className="bg-surface">
+            <div className="border-b border-hairline px-inset py-3">
+              <span className="font-ui text-ui text-ink">{cap.heading}</span>
+            </div>
+            {cap.examples.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => onUse(ex)}
+                className="flex w-full items-start gap-3 border-b border-hairline px-inset py-3 text-left last:border-b-0 hover:bg-sunken transition-colors group"
+              >
+                <ArrowRight size={12} strokeWidth={2} className="mt-1 shrink-0 text-ink-tertiary group-hover:text-ink transition-colors" />
+                <span className="font-ui text-ui leading-5 text-ink-secondary group-hover:text-ink transition-colors">{ex}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6">
+        <Link
+          href="/dashboard"
+          className="font-ui text-ui text-ink-secondary transition-colors hover:text-ink"
+        >
+          Back to directory
+        </Link>
+      </div>
+    </section>
   );
 }
