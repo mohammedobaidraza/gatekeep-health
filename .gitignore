@@ -10,3 +10,5 @@ gatekeep.db
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+
+*.log

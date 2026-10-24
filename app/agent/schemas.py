@@ -35,6 +35,10 @@ class OnboardingEmployeeData(BaseModel):
     start_date: date | None = None
     access_template: Literal[
         "physician",
+        "cardiologist",
+        "medical_director",
+        "case_manager",
+        "clinical_nurse_manager",
         "nurse",
         "pharmacist",
         "radiology_tech",
@@ -101,3 +105,6 @@ class AgentRunResponse(BaseModel):
     steps: list[AgentStepResult]
     summary: dict = {}
     message: str
+    # Grouped access for the agent UI panel (EHR / domain / shared drive / HRIS).
+    access_groups: list[dict] = []
+    access_action: Literal["granted", "revoked"] | None = None

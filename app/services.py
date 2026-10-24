@@ -97,7 +97,7 @@ ACCESS_TEMPLATES = {
             {"platform": "Insurance Portal", "access": "Claims Processor", "risk": "high", "sessions": 1, "credentials": []},
             {"platform": "Scheduling System", "access": "Scheduler", "risk": "medium", "sessions": 1, "credentials": []},
             {"platform": "Revenue Cycle Management", "access": "Coder", "risk": "high", "sessions": 1, "credentials": []},
-            {"platform": "Microsoft 365", "access": "Standard", "risk": "low", "sessions": 1, "credentials": []},
+            {"platform": "Patient Registration (ADT)", "access": "Registrar", "risk": "medium", "sessions": 1, "credentials": []},
         ],
     },
     "it_security": {
@@ -113,7 +113,124 @@ ACCESS_TEMPLATES = {
             {"platform": "Cloud Health Platform", "access": "Admin", "risk": "critical", "sessions": 1, "credentials": ["Access key"]},
         ],
     },
+    "cardiologist": {
+        "name": "Cardiologist (MD)",
+        "department": "Cardiology",
+        "description": "Epic cardiology, echocardiography, cardiac cath lab, ECG management, cardiovascular imaging, and e-prescribing with DEA.",
+        "accounts": [
+            {"platform": "Epic EMR (Cardiology)", "access": "Attending Cardiologist", "risk": "critical", "sessions": 2, "credentials": ["Smart card", "RSA token"]},
+            {"platform": "Philips Xcelera (Echocardiography)", "access": "Reading Physician", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "GE Mac-Lab (Cardiac Cath Lab)", "access": "Interventional", "risk": "critical", "sessions": 1, "credentials": ["Smart card"]},
+            {"platform": "GE MUSE (ECG Management)", "access": "Cardiologist", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "CVIS (Cardiovascular Info System)", "access": "Physician", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "eRx / Surescripts", "access": "Prescriber", "risk": "critical", "sessions": 1, "credentials": ["DEA certificate"]},
+        ],
+    },
+    "medical_director": {
+        "name": "Medical Director",
+        "department": "Clinical Medicine",
+        "description": "Executive Epic access, clinical quality analytics, provider credentialing, peer review, formulary oversight, and incident/risk management.",
+        "accounts": [
+            {"platform": "Epic EMR (Executive)", "access": "Chief / Medical Director", "risk": "critical", "sessions": 2, "credentials": ["Smart card", "RSA token"]},
+            {"platform": "Clinical Quality Dashboard", "access": "Director", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "symplr Credentialing & Privileging", "access": "Approver", "risk": "critical", "sessions": 1, "credentials": []},
+            {"platform": "Peer Review System", "access": "Reviewer", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Formulary Oversight", "access": "Medical Director", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Incident & Risk Management (RL6)", "access": "Administrator", "risk": "high", "sessions": 1, "credentials": []},
+        ],
+    },
+    "case_manager": {
+        "name": "Clinical Case Manager (RN)",
+        "department": "Case Management",
+        "description": "Epic case management, utilization review, discharge planning, care coordination, payer authorization, and social services referral.",
+        "accounts": [
+            {"platform": "Epic Case Management", "access": "Case Manager", "risk": "high", "sessions": 2, "credentials": ["Smart card"]},
+            {"platform": "InterQual / MCG (Utilization Review)", "access": "Reviewer", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Discharge Planning System", "access": "Planner", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Care Coordination Portal", "access": "Care Manager", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Payer Authorization Portal", "access": "Submitter", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Social Services Referral", "access": "Coordinator", "risk": "medium", "sessions": 1, "credentials": []},
+        ],
+    },
+    "clinical_nurse_manager": {
+        "name": "Clinical Nurse Manager (RN)",
+        "department": "Clinical Nursing",
+        "description": "Epic nursing administration, staff scheduling, medication oversight, patient acuity, incident reporting, and clinical education.",
+        "accounts": [
+            {"platform": "Epic EMR (Nursing Admin)", "access": "Nurse Manager", "risk": "high", "sessions": 2, "credentials": ["Smart card"]},
+            {"platform": "UKG / Kronos (Staff Scheduling)", "access": "Manager", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "MAR Oversight", "access": "Supervisor", "risk": "critical", "sessions": 1, "credentials": ["Badge scan"]},
+            {"platform": "Patient Acuity & Classification", "access": "Manager", "risk": "medium", "sessions": 1, "credentials": []},
+            {"platform": "Incident Reporting (RL6)", "access": "Unit Manager", "risk": "high", "sessions": 1, "credentials": []},
+            {"platform": "Clinical Education LMS", "access": "Instructor", "risk": "low", "sessions": 1, "credentials": []},
+        ],
+    },
 }
+
+
+# Baseline access every staff member receives on top of their clinical systems:
+# corporate domain (Google Workspace), shared knowledge drives, and the HRIS (Rippling).
+BASE_ACCOUNTS = [
+    {"platform": "Google Workspace", "access": "Member", "risk": "medium", "sessions": 1, "credentials": ["SSO / 2FA"], "account_type": "domain"},
+    {"platform": "Shared Drive — Employee Handbook", "access": "Read", "risk": "low", "sessions": 0, "credentials": [], "account_type": "shared_drive"},
+    {"platform": "Shared Drive — EMR Training", "access": "Read / Write", "risk": "low", "sessions": 0, "credentials": [], "account_type": "shared_drive"},
+    {"platform": "Rippling (HRIS)", "access": "Employee", "risk": "medium", "sessions": 1, "credentials": [], "account_type": "hris"},
+]
+
+
+# Display groups used by the Gary agent's access panel (UI effect).
+ACCESS_GROUPS = [
+    ("EHR & Clinical Systems", "ehr"),
+    ("Domain Access", "domain"),
+    ("Shared Drive Access", "shared_drive"),
+    ("HRIS System", "hris"),
+]
+
+
+def categorize_platform(platform: str) -> str:
+    p = platform.lower()
+    if p.startswith("shared drive"):
+        return "shared_drive"
+    if "rippling" in p or "hris" in p:
+        return "hris"
+    if "google workspace" in p or "microsoft 365" in p or p in {"gws", "m365"}:
+        return "domain"
+    if "directory" in p:
+        return "directory"
+    return "ehr"
+
+
+def group_access(accounts: list) -> list[dict]:
+    """Group EmployeeAccount rows into the four display categories for the agent UI."""
+    groups = []
+    for label, key in ACCESS_GROUPS:
+        items = [a for a in accounts if categorize_platform(a.platform) == key]
+        if items:
+            groups.append({
+                "label": label,
+                "category": key,
+                "platforms": [
+                    {"platform": a.platform, "access_level": a.access_level,
+                     "status": a.status, "identifier": a.identifier,
+                     "risk_level": a.risk_level}
+                    for a in items
+                ],
+            })
+    return groups
+
+
+def provision_base_accounts(db: Session, employee: Employee):
+    """Create the baseline (domain / shared drive / HRIS) accounts for an employee."""
+    local = employee.company_email.split("@")[0]
+    created = []
+    for defn in BASE_ACCOUNTS:
+        identifier = employee.company_email if defn["account_type"] == "domain" else local.replace(".", "-")
+        created.append(add_account(
+            db, employee, defn["platform"], identifier,
+            defn["access"], defn["risk"], defn["account_type"],
+            sessions=defn["sessions"], credentials=defn["credentials"],
+        ))
+    return created
 
 
 def infer_access_template(employee: Employee) -> str:
@@ -164,6 +281,9 @@ def auto_provision(db: Session, employee: Employee, template_key: str | None = N
             credentials=defn["credentials"],
         )
         created.append(account)
+
+    # Everyone also gets domain, shared drive, and HRIS access.
+    created.extend(provision_base_accounts(db, employee))
 
     db.commit()
     return created
@@ -374,6 +494,7 @@ def reset_demo(db: Session):
     add_account(db, sarah, 'Care Coordination Portal', 'sarah.chen', 'Attending', 'high', sessions=1)
     add_account(db, sarah, 'Telemedicine Platform', 'sarah.chen@cityhealth.org', 'Provider', 'medium', sessions=1)
     add_account(db, sarah, 'Clinical Decision Support', 'sarah.chen', 'Standard', 'low', sessions=1)
+    provision_base_accounts(db, sarah)
     db.add(CompanyAsset(
         employee_id=sarah.id, asset_type='mobile_device', provider='Apple',
         identifier='iPhone GK-MED-019', status='assigned', metadata_json='{}',
@@ -421,6 +542,92 @@ def reset_demo(db: Session):
     db.add(fatima); db.flush()
     auto_provision(db, fatima, template_key='pharmacist')
 
+    # Dr. Marcus Reed — Cardiologist (critical access, DEA prescriber)
+    marcus = Employee(
+        full_name='Dr. Marcus Reed',
+        company_email='marcus.reed@cityhealth.org',
+        department='Cardiology',
+        job_title='Cardiologist',
+        manager_name='Dr. Michael Roberts',
+        employment_status='active',
+        start_date=datetime(2021, 11, 8).date(),
+        risk_score=88,
+        last_access_review=utcnow() - timedelta(days=40),
+        npi_number='1122334455',
+        license_number='MD-CA-33210',
+        license_state='CA',
+        license_type='MD',
+        dea_number='BR3344551',
+        privilege_level='full',
+        credential_expiry=datetime(2026, 9, 30).date(),
+    )
+    db.add(marcus); db.flush()
+    auto_provision(db, marcus, template_key='cardiologist')
+
+    # Dr. Evelyn Shaw — Medical Director (executive, governance access)
+    evelyn = Employee(
+        full_name='Dr. Evelyn Shaw',
+        company_email='evelyn.shaw@cityhealth.org',
+        department='Clinical Medicine',
+        job_title='Medical Director',
+        manager_name='Chief Executive Officer',
+        employment_status='active',
+        start_date=datetime(2019, 2, 18).date(),
+        risk_score=90,
+        last_access_review=utcnow() - timedelta(days=12),
+        npi_number='2233445566',
+        license_number='MD-CA-11002',
+        license_state='CA',
+        license_type='MD',
+        dea_number='BS1100293',
+        privilege_level='full',
+        credential_expiry=datetime(2027, 3, 31).date(),
+    )
+    db.add(evelyn); db.flush()
+    auto_provision(db, evelyn, template_key='medical_director')
+
+    # Grace Lee — Clinical Case Manager (RN)
+    grace = Employee(
+        full_name='Grace Lee',
+        company_email='grace.lee@cityhealth.org',
+        department='Case Management',
+        job_title='Clinical Case Manager',
+        manager_name='Dr. Evelyn Shaw',
+        employment_status='active',
+        start_date=datetime(2023, 5, 22).date(),
+        risk_score=58,
+        last_access_review=utcnow() - timedelta(days=30),
+        npi_number='3344556677',
+        license_number='RN-CA-55120',
+        license_state='CA',
+        license_type='RN',
+        privilege_level='standard',
+        credential_expiry=datetime(2026, 11, 30).date(),
+    )
+    db.add(grace); db.flush()
+    auto_provision(db, grace, template_key='case_manager')
+
+    # Maria Gomez — Clinical Nurse Manager (RN)
+    maria = Employee(
+        full_name='Maria Gomez',
+        company_email='maria.gomez@cityhealth.org',
+        department='Clinical Nursing',
+        job_title='Clinical Nurse Manager',
+        manager_name='Dr. Evelyn Shaw',
+        employment_status='active',
+        start_date=datetime(2020, 8, 3).date(),
+        risk_score=64,
+        last_access_review=utcnow() - timedelta(days=18),
+        npi_number='4455667788',
+        license_number='RN-CA-60144',
+        license_state='CA',
+        license_type='RN',
+        privilege_level='standard',
+        credential_expiry=datetime(2027, 6, 30).date(),
+    )
+    db.add(maria); db.flush()
+    auto_provision(db, maria, template_key='clinical_nurse_manager')
+
     db.commit()
     audit(db, None, 'system', 'reset_demo', 'cityhealth.org', 'completed',
-          'Created three synthetic healthcare staff members')
+          'Created seven synthetic healthcare staff members across clinical roles')

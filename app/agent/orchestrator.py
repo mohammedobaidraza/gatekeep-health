@@ -27,8 +27,22 @@ from app.services import (
     audit,
     auto_provision,
     employee_detail,
+    group_access,
     terminate,
 )
+
+
+def _healthcare_risk(department: str) -> int:
+    dept = (department or "").lower()
+    if any(kw in dept for kw in ["medicine", "surgery", "icu", "emergency"]):
+        return 75
+    if any(kw in dept for kw in ["pharmacy", "nursing"]):
+        return 65
+    if any(kw in dept for kw in ["radiology", "imaging"]):
+        return 55
+    if "information technology" in dept or "it" in dept or "security" in dept:
+        return 45
+    return 35
 
 
 def make_step(
@@ -416,11 +430,7 @@ def execute_onboarding(
         manager_name=plan.employee.manager_name,
         start_date=plan.employee.start_date,
         employment_status="active",
-        risk_score=(
-            45
-            if plan.employee.department.lower() == "engineering"
-            else 30
-        ),
+        risk_score=_healthcare_risk(plan.employee.department),
     )
 
     db.add(employee)
@@ -430,7 +440,7 @@ def execute_onboarding(
     add_account(
         db,
         employee,
-        "Company Directory",
+        "Staff Directory",
         employee.company_email,
         "Employee",
         "low",
@@ -531,6 +541,8 @@ def execute_onboarding(
             "accounts_verified": len(active_accounts),
             "verification_passed": verified,
         },
+        access_groups=group_access(all_accounts),
+        access_action="granted",
         message=(
             "Employee onboarding completed and verified."
             if verified
@@ -684,6 +696,8 @@ def execute_offboarding(
         confidence=planned.confidence,
         steps=steps,
         summary=summary,
+        access_groups=group_access(all_accounts),
+        access_action="revoked",
         message=(
             "Employee offboarding completed and verified."
             if verified

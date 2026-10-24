@@ -40,14 +40,29 @@ export default function DashboardPage() {
       try { setRole(JSON.parse(user).role ?? ""); } catch { /* ignore */ }
     }
 
-    getEmployees(token)
-      .then(setStaff)
-      .catch((error) => {
-        setError(
-          error instanceof Error ? error.message : "Failed to load clinical staff"
-        );
-      })
-      .finally(() => setLoading(false));
+    function load() {
+      getEmployees(token!)
+        .then(setStaff)
+        .catch((error) => {
+          setError(
+            error instanceof Error ? error.message : "Failed to load clinical staff"
+          );
+        })
+        .finally(() => setLoading(false));
+    }
+
+    load();
+
+    // Re-fetch whenever the directory regains focus or becomes visible again —
+    // so onboarding/offboarding done elsewhere (e.g. via Gary) shows up on return.
+    function onFocus() { load(); }
+    function onVisible() { if (document.visibilityState === "visible") load(); }
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   function logout() {
@@ -104,7 +119,7 @@ export default function DashboardPage() {
               href="/gary"
               className="flex h-control items-center gap-2 border border-brand bg-brand px-inset font-ui text-ui text-surface transition-colors hover:border-pop hover:bg-pop hover:text-brand"
             >
-              Ask Grace
+              Ask Gary
               <ArrowRight size={12} strokeWidth={2} />
             </Link>
           </>

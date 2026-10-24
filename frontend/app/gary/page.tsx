@@ -1,30 +1,30 @@
 "use client";
 
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Verified } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Caption, PanelTitle } from "@/components/ui/Panel";
 import { PageHeader, Shell } from "@/components/ui/Shell";
-import { GaryAgentResult, GaryAgentStep, streamGraceAgent } from "@/lib/api";
+import { AccessGroup, GaryAgentResult, GaryAgentStep, streamGaryAgent } from "@/lib/api";
 
 const EXAMPLES = [
   {
-    label: "Credential a physician",
-    text: "Add Dr. Layla Hassan as an attending physician. Her email is layla.hassan@cityhealth.org. Her supervisor is Dr. Michael Roberts.",
+    label: "Credential a cardiologist",
+    text: "Onboard Dr. Layla Hassan as a cardiologist. Her email is layla.hassan@cityhealth.org. Her supervisor is Dr. Michael Roberts.",
   },
   {
-    label: "Credential a nurse",
-    text: "Onboard Sarah Kim as a registered nurse in the ICU. Her email is sarah.kim@cityhealth.org and her license number is RN-CA-44201.",
+    label: "Credential a medical director",
+    text: "Add Dr. Omar Farouk as a medical director. His email is omar.farouk@cityhealth.org.",
+  },
+  {
+    label: "Credential a case manager",
+    text: "Onboard Grace Lee as a clinical case manager. Her email is grace.lee@cityhealth.org and her license number is RN-CA-55120.",
   },
   {
     label: "Offboard immediately",
     text: "Offboard Nurse James Torres immediately. Revoke all clinical system access, preserve patient records per HIPAA, and notify the department head.",
-  },
-  {
-    label: "Scheduled offboarding",
-    text: "Schedule the offboarding of Dr. Fatima Al-Rashid for her last day, December 31. Preserve all patient records and transfer files to her supervisor.",
   },
 ];
 
@@ -57,7 +57,7 @@ function titleCase(key: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export default function GracePage() {
+export default function GaryPage() {
   const [instruction, setInstruction] = useState("");
   const [result, setResult] = useState<GaryAgentResult | null>(null);
   const [liveSteps, setLiveSteps] = useState<GaryAgentStep[]>([]);
@@ -83,7 +83,7 @@ export default function GracePage() {
     setLiveSteps([]);
 
     try {
-      for await (const event of streamGraceAgent(token, cleaned, true)) {
+      for await (const event of streamGaryAgent(token, cleaned, true)) {
         if (event.type === "step") {
           setLiveSteps((prev) => {
             const next = prev.filter((s) => s.sequence !== event.step.sequence);
@@ -96,7 +96,7 @@ export default function GracePage() {
         }
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Grace could not complete the request.");
+      setError(cause instanceof Error ? cause.message : "Gary could not complete the request.");
     } finally {
       setRunning(false);
     }
@@ -117,8 +117,8 @@ export default function GracePage() {
       }
     >
       <PageHeader
-        title="Grace"
-        subtitle="Describe a credentialing or offboarding in plain language. Grace works out the intent, executes it, and verifies the result."
+        title="Gary"
+        subtitle="Describe a credentialing or offboarding in plain language. Gary works out the intent, executes it, and verifies the result."
       />
 
       <div className="mt-8 bg-surface p-inset">
@@ -153,7 +153,7 @@ export default function GracePage() {
 
         <div className="mt-6">
           <Button variant="solid" icon={ArrowRight} disabled={running} onClick={run}>
-            {running ? "Grace is working" : "Run Grace"}
+            {running ? "Gary is working" : "Run Gary"}
           </Button>
         </div>
       </div>
@@ -202,6 +202,14 @@ export default function GracePage() {
                 </Caption>
               ) : null}
             </section>
+
+            {result.access_groups && result.access_groups.length > 0 && result.access_action ? (
+              <AccessPanel
+                key={result.run_id}
+                groups={result.access_groups}
+                mode={result.access_action}
+              />
+            ) : null}
 
             {Object.keys(result.summary).length > 0 ? (
               <section className="mt-10">
@@ -285,13 +293,116 @@ function Figure({ label, value }: { label: string; value: string }) {
   );
 }
 
+function AccessPanel({
+  groups,
+  mode,
+}: {
+  groups: AccessGroup[];
+  mode: "granted" | "revoked";
+}) {
+  const items = useMemo(
+    () => groups.flatMap((g) => g.platforms.map((p) => ({ ...p, group: g.label }))),
+    [groups],
+  );
+  const [shown, setShown] = useState(0);
+
+  useEffect(() => {
+    setShown(0);
+    if (items.length === 0) return;
+    const id = setInterval(() => {
+      setShown((s) => {
+        if (s >= items.length) {
+          clearInterval(id);
+          return s;
+        }
+        return s + 1;
+      });
+    }, 420);
+    return () => clearInterval(id);
+  }, [items]);
+
+  if (items.length === 0) return null;
+
+  const done = shown >= items.length;
+  const verb = mode === "granted" ? "Granting" : "Revoking";
+  const pastVerb = mode === "granted" ? "Granted" : "Revoked";
+  const title = mode === "granted" ? "Access provisioning" : "Access revocation";
+
+  return (
+    <section className="mt-10">
+      <div className="flex items-center justify-between">
+        <PanelTitle>{title}</PanelTitle>
+        <span className="font-ui text-ui tabular-nums text-ink-tertiary">
+          {Math.min(shown, items.length)} / {items.length}
+        </span>
+      </div>
+
+      <div className="mt-4 bg-surface">
+        {groups.map((group) => {
+          const base = items.findIndex((it) => it.group === group.label);
+          return (
+            <div key={group.category} className="border-b border-hairline last:border-b-0">
+              <div className="px-inset pt-4 pb-2">
+                <span className="font-ui text-ui text-ink-tertiary">{group.label}</span>
+              </div>
+              {group.platforms.map((p, i) => {
+                const globalIndex = base + i;
+                const isDone = globalIndex < shown;
+                const isActive = globalIndex === shown && !done;
+                return (
+                  <div
+                    key={p.platform}
+                    className={`flex items-center justify-between gap-4 px-inset py-3 transition-opacity duration-300 ${
+                      isDone || isActive ? "opacity-100" : "opacity-40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                        {isDone ? (
+                          <Check size={12} strokeWidth={2.5} className="text-ink" />
+                        ) : (
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full bg-ink-tertiary ${
+                              isActive ? "animate-pulse" : ""
+                            }`}
+                          />
+                        )}
+                      </span>
+                      <span className={`font-ui text-ui ${isDone ? "text-ink" : "text-ink-secondary"}`}>
+                        {p.platform}
+                        <span className="text-ink-tertiary"> · {p.access_level}</span>
+                      </span>
+                    </div>
+                    <span className="font-ui text-ui whitespace-nowrap text-ink-tertiary">
+                      {isDone ? pastVerb : isActive ? `${verb}…` : "Pending"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      <Caption className="mt-3 text-ink-tertiary">
+        {done
+          ? mode === "granted"
+            ? "All access provisioned and verified."
+            : "All access paths revoked and verified."
+          : `${verb} access across clinical and corporate systems…`}
+      </Caption>
+    </section>
+  );
+}
+
 const CAPABILITIES = [
   {
     heading: "Credential a clinician",
     examples: [
-      "Add Dr. Layla Hassan as an attending physician. Her email is layla.hassan@cityhealth.org.",
-      "Onboard Sarah Kim as a registered nurse. License RN-CA-44201. Supervisor is Charge Nurse Patricia Kim.",
-      "Add a new pharmacist — Dr. Omar Farouk, email omar.farouk@cityhealth.org, DEA number BF1234567.",
+      "Onboard Dr. Layla Hassan as a cardiologist. Her email is layla.hassan@cityhealth.org.",
+      "Add Dr. Raj Patel as a medical director. Email raj.patel@cityhealth.org.",
+      "Onboard Grace Lee as a clinical case manager. Email grace.lee@cityhealth.org, license RN-CA-55120.",
+      "Add Maria Gomez as a clinical nurse manager. Email maria.gomez@cityhealth.org.",
     ],
   },
   {
@@ -307,9 +418,9 @@ const CAPABILITIES = [
 function UnknownResult({ onUse }: { onUse: (text: string) => void }) {
   return (
     <section className="mt-10">
-      <PanelTitle>Grace handles two things</PanelTitle>
+      <PanelTitle>Gary handles two things</PanelTitle>
       <Caption className="mt-2 text-ink-tertiary">
-        Describe the action in plain language — Grace works out the details, executes it, and verifies the result. Here are some examples to get started.
+        Describe the action in plain language — Gary works out the details, executes it, and verifies the result. Here are some examples to get started.
       </Caption>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2">

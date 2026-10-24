@@ -19,7 +19,7 @@ We forked **GateKeep** (https://github.com/huda-code/GateKeep) — a generic emp
 - Product renamed from **GateKeep** → **GateKeep Health** throughout the entire codebase
 - Logo updated: "GateKeep **Health**" with subdued Health suffix
 - Page title, meta description, and all in-app copy rewritten for a clinical context
-- "Employees" → **Clinicians**, "Offboard" → **Offboard clinician**, "Gary" agent → **Grace**
+- "Employees" → **Clinicians**, "Offboard" → **Offboard clinician**; AI agent name standardized to **Gary**
 
 ---
 
@@ -92,14 +92,14 @@ The "Add clinician" page was completely rebuilt:
 
 ---
 
-### 6. Grace (AI Agent)
+### 6. Gary (AI Agent)
 
-The "Gary" AI agent was rebranded as **Grace** and updated with healthcare-specific examples:
+The **Gary** AI agent was updated with healthcare-specific examples:
 
 - **Credentialing example:** "Add Dr. Layla Hassan as an attending physician. Her email is layla.hassan@cityhealth.org. Her supervisor is Dr. Michael Roberts."
 - **Offboarding example:** "Offboard Nurse James Torres immediately. Revoke all clinical system access, preserve patient records per HIPAA, and notify the department head."
 
-Grace resolves the clinician, builds an access plan, executes the workflow, verifies the result, and writes a structured report — all from plain-language instructions.
+Gary resolves the clinician, builds an access plan, executes the workflow, verifies the result, and writes a structured report — all from plain-language instructions.
 
 The agent offboarding actions were also updated to healthcare terminology:
 - `preserve_records` (HIPAA patient record preservation)
@@ -183,5 +183,5 @@ npm run dev
 | `frontend/app/dashboard/page.tsx` | Clinical columns: License, Credential Status, HIPAA Risk |
 | `frontend/app/employees/new/page.tsx` | Full healthcare onboarding form |
 | `frontend/app/employees/[id]/page.tsx` | Licensure block; healthcare stat labels |
-| `frontend/app/gary/page.tsx` | Gary → Grace; healthcare examples |
+| `frontend/app/gary/page.tsx` | Gary agent; healthcare examples |
 | `.env.example` | 4 demo user credential sets |

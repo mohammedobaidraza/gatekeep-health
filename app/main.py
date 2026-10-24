@@ -178,7 +178,7 @@ def reset_user_password(
 @app.post("/api/v1/demo/reset")
 def demo_reset(db: Session = Depends(get_db)):
     reset_demo(db)
-    return {"status": "reset", "staff": 3, "users": 4}
+    return {"status": "reset", "staff": 7, "users": 4}
 
 
 # ── Access Templates ───────────────────────────────────────────────────────────
@@ -471,17 +471,17 @@ def export_audit_events(employee_id: int, db: Session = Depends(get_db), user=De
     )
 
 
-# ── Grace (AI Agent) — blocking run ───────────────────────────────────────────
+# ── Gary (AI Agent) — blocking run ───────────────────────────────────────────
 
 @app.post("/api/v1/agent/run", response_model=AgentRunResponse)
-def run_grace_agent(payload: AgentRunRequest, db: Session = Depends(get_db), user=Depends(require_auth)):
+def run_gary_agent(payload: AgentRunRequest, db: Session = Depends(get_db), user=Depends(require_auth)):
     return run_agent(db, instruction=payload.instruction, auto_execute=payload.auto_execute, actor=user["email"])
 
 
-# ── Grace (AI Agent) — SSE streaming run ──────────────────────────────────────
+# ── Gary (AI Agent) — SSE streaming run ──────────────────────────────────────
 
 @app.post("/api/v1/agent/stream")
-async def stream_grace_agent(
+async def stream_gary_agent(
     payload: AgentRunRequest,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),

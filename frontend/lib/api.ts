@@ -75,6 +75,7 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
+    cache: "no-store",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -455,7 +456,7 @@ export async function getAccessTemplates(token: string) {
   });
 }
 
-// ── Grace (AI Agent) ───────────────────────────────────────────────────────────
+// ── Gary (AI Agent) ───────────────────────────────────────────────────────────
 
 export type GaryAgentStep = {
   sequence: number;
@@ -463,6 +464,20 @@ export type GaryAgentStep = {
   status: "pending" | "running" | "completed" | "verified" | "failed" | "needs_input";
   message: string;
   evidence: Record<string, unknown>;
+};
+
+export type AccessPlatform = {
+  platform: string;
+  access_level: string;
+  status: string;
+  identifier: string;
+  risk_level?: string;
+};
+
+export type AccessGroup = {
+  label: string;
+  category: string;
+  platforms: AccessPlatform[];
 };
 
 export type GaryAgentResult = {
@@ -475,6 +490,8 @@ export type GaryAgentResult = {
   steps: GaryAgentStep[];
   summary: Record<string, unknown>;
   message: string;
+  access_groups?: AccessGroup[];
+  access_action?: "granted" | "revoked" | null;
 };
 
 export async function runGaryAgent(
@@ -489,25 +506,25 @@ export async function runGaryAgent(
   });
 }
 
-// ── Grace streaming (SSE via fetch ReadableStream) ─────────────────────────────
+// ── Gary streaming (SSE via fetch ReadableStream) ─────────────────────────────
 
-export type GraceStreamEvent =
+export type GaryStreamEvent =
   | { type: "step"; step: GaryAgentStep }
   | { type: "done"; result: GaryAgentResult }
   | { type: "error"; message: string };
 
-export async function* streamGraceAgent(
+export async function* streamGaryAgent(
   token: string,
   instruction: string,
   autoExecute = true
-): AsyncGenerator<GraceStreamEvent> {
+): AsyncGenerator<GaryStreamEvent> {
   const response = await fetch(`${API_URL}/api/v1/agent/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ instruction, auto_execute: autoExecute }),
   });
   if (!response.ok) {
-    throw new Error(`Grace stream failed: ${response.status}`);
+    throw new Error(`Gary stream failed: ${response.status}`);
   }
   if (!response.body) throw new Error("No response body");
 
@@ -526,7 +543,7 @@ export async function* streamGraceAgent(
         const raw = line.slice(6).trim();
         if (raw) {
           try {
-            yield JSON.parse(raw) as GraceStreamEvent;
+            yield JSON.parse(raw) as GaryStreamEvent;
           } catch {
             // malformed chunk — skip
           }
